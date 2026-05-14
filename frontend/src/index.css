@@ -1,0 +1,127 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html,
+body,
+#root {
+  background: #e8ecf4;
+  min-height: 100%;
+}
+
+body {
+  font-family: 'Sora', 'Inter', 'Segoe UI', sans-serif;
+  background: #e8ecf4;
+  color: #1a1d2e;
+  font-size: 13px;
+  min-height: 100vh;
+}
+
+.app-shell {
+  max-width: 1200px;
+  margin: 0 auto;
+  background: #f4f6fa;
+  min-height: 100vh;
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2 rounded-sm
+           text-xs font-medium cursor-pointer border border-dborder2
+           bg-card2 text-t1 transition-all duration-150 font-sora;
+  }
+  .btn:hover { @apply bg-bg4 border-dborder2; }
+  .btn-p {
+    @apply bg-accent text-white border-accent;
+  }
+  .btn-p:hover { @apply bg-accent2 border-accent2; }
+  .btn-teal {
+    @apply text-teal border-teal bg-teal/10;
+  }
+  .btn-sm { @apply px-3 py-1.5 text-[11px] rounded-sm; }
+  .btn-full { @apply w-full; }
+
+  .card {
+    @apply bg-card2 border border-dborder rounded-card p-5 transition-colors duration-200;
+  }
+  .card:hover { @apply border-dborder2; }
+
+  .mcard {
+    @apply bg-card2 border border-dborder rounded-card px-5 py-4 relative overflow-hidden
+           transition-colors duration-200;
+  }
+  .mcard:hover { @apply border-dborder2; }
+
+  .sect {
+    @apply text-[10px] font-semibold uppercase tracking-widest text-t3 mb-3.5
+           flex items-center gap-2;
+  }
+  .sect::after {
+    content: '';
+    @apply flex-1 h-px bg-dborder;
+  }
+
+  .pill-g { @apply inline-flex items-center text-[10px] font-medium px-2 py-0.5 rounded-lg bg-gg/10 text-gg border border-gg/30; }
+  .pill-b { @apply inline-flex items-center text-[10px] font-medium px-2 py-0.5 rounded-lg bg-purple/10 text-purple border border-purple/30; }
+  .pill-a { @apply inline-flex items-center text-[10px] font-medium px-2 py-0.5 rounded-lg bg-amber/10 text-amber border border-amber/30; }
+  .pill-t { @apply inline-flex items-center text-[10px] font-medium px-2 py-0.5 rounded-lg bg-teal/10 text-teal border border-teal/30; }
+
+  .apill {
+    @apply text-[9px] font-medium px-2 py-0.5 rounded-lg border border-dborder text-t3 bg-bg4;
+  }
+  .apill-done { @apply bg-gg/10 text-gg border-gg/30; }
+  .apill-active { @apply bg-purple/10 text-purple border-purple/30 animate-pulse; }
+
+  .ft-badge { @apply inline-flex items-center text-[9px] font-bold px-2 py-0.5 rounded-md; }
+
+  .prog-bar {
+    @apply h-1.5 bg-bg4 rounded-full overflow-hidden;
+  }
+  .prog-fill { @apply h-full rounded-full bg-accent transition-all duration-700 ease-out; }
+
+  .model-row {
+    @apply flex items-center gap-3 p-3 bg-card2 border border-dborder rounded-sm
+           mb-2 transition-all duration-150 cursor-pointer;
+  }
+  .model-row:hover { @apply border-dborder2 bg-bg4; }
+  .model-row.chosen { @apply border-teal bg-teal/5; }
+
+  .pyramid-step {
+    @apply flex items-center justify-center h-9 rounded-[10px] px-5 text-[12px] font-semibold
+           bg-bg3 border border-dborder2 text-t2;
+  }
+  .pyramid-step-active { @apply bg-accent/10 border-accent/40 text-accent2; }
+  .pyramid-step-done { @apply bg-teal/10 border border-teal/30 text-teal; }
+
+  .tl-item { @apply flex gap-3.5 pb-5 relative; }
+  .tl-item:not(:last-child)::before {
+    content: '';
+    @apply absolute left-[17px] top-9 bottom-0 w-px bg-dborder;
+  }
+
+  .thinking-bar {
+    @apply flex items-center gap-2.5 px-4 py-3 bg-purple/10 rounded-sm text-[11px]
+           text-purple border border-purple/30 transition-all duration-500;
+  }
+
+  .db-chip {
+    @apply flex items-center gap-1.5 px-2.5 py-1 bg-bg4 border border-dborder rounded-lg
+           text-[10px] font-medium text-t2 cursor-pointer transition-all duration-150;
+  }
+  .db-chip:hover { @apply border-accent text-accent; }
+  .db-chip-connected { @apply border-gg/30 text-gg bg-gg/10; }
+
+  .prompt-box {
+    @apply w-full bg-bg3 border border-dborder2 rounded-card px-4 py-3.5
+           text-sm text-t1 resize-y min-h-24 outline-none transition-colors
+           duration-200 leading-relaxed font-dm;
+  }
+  .prompt-box:focus { @apply border-accent; box-shadow: 0 0 0 3px rgba(79,70,229,.1); }
+  .prompt-box::placeholder { @apply text-t3; }
+}
+
+@keyframes pillpulse { 0%,100%{opacity:1}50%{opacity:.5} }
+@keyframes blink { 0%,100%{opacity:1}50%{opacity:.12} }
+.animate-blink { animation: blink 1.3s infinite; }

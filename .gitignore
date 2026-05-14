@@ -1,0 +1,25 @@
+venv/
+env/
+.venv/
+frontend/node_modules/
+__pycache__/
+*.pyc
+*.pyo
+
+# Python virtual environments (large)
+backend/venv/
+backend/venv_linux/
+backend/.venv/
+
+# Backend generated artifacts (large, reproducible)
+backend/data/files/
+backend/data/processed/
+backend/data/faiss/
+backend/data/graphs/
+backend/data/wiki_pages/
+backend/data/db_schemas/
+backend/data/db_data/generated/
+
+# Local environment files
+.env
+backend/.env

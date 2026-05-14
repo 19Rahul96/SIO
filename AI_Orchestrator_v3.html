@@ -1,0 +1,1198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Orchestrator — SLM Intelligence Platform</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #0e0e14;
+  --bg2:       #13131c;
+  --bg3:       #1a1a28;
+  --bg4:       #20202f;
+  --card:      #181825;
+  --card2:     #1e1e2e;
+  --border:    #2a2a3d;
+  --border2:   #35354f;
+  --text1:     #e8e6f0;
+  --text2:     #9390b0;
+  --text3:     #5c5a78;
+  --accent:    #7c6af8;
+  --accent2:   #9d8eff;
+  --accentdim: rgba(124,106,248,0.12);
+  --teal:      #2dd4a0;
+  --teallt:    rgba(45,212,160,0.1);
+  --tealbdr:   rgba(45,212,160,0.3);
+  --green:     #4ade80;
+  --greenlt:   rgba(74,222,128,0.1);
+  --greenbdr:  rgba(74,222,128,0.3);
+  --amber:     #fbbf24;
+  --amberlt:   rgba(251,191,36,0.1);
+  --amberbdr:  rgba(251,191,36,0.3);
+  --coral:     #fb7185;
+  --corallt:   rgba(251,113,133,0.1);
+  --coralbdr:  rgba(251,113,133,0.3);
+  --purple:    #a78bfa;
+  --purplelt:  rgba(167,139,250,0.1);
+  --purplebdr: rgba(167,139,250,0.3);
+  --blue:      #60a5fa;
+  --bluelt:    rgba(96,165,250,0.1);
+  --bluebdr:   rgba(96,165,250,0.3);
+  --radius:    14px;
+  --radius-sm: 9px;
+  --sidebar:   260px;
+  --content:   1100px;
+}
+
+body {
+  font-family: 'Sora', 'Inter', 'Segoe UI', sans-serif;
+  background: #474849;
+  color: var(--text1);
+  font-size: 13px;
+  min-height: 100vh;
+}
+
+/* Wrap main content */
+.page {
+  display: none;
+  padding-top: 56px;
+  min-height: 100vh;
+  max-width: 1200px;
+  margin: 0 auto;
+  background: var(--bg);
+}
+
+/* ── TOPBAR ── */
+.topbar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 200;
+  height: 56px;
+  background: rgba(14,14,20,0.92);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 40px;
+}
+.brand { display: flex; align-items: center; gap: 12px; font-family: 'Sora', sans-serif; font-weight: 700; font-size: 18px; color: var(--text1); text-decoration: none; }
+.brand-mark { width: 30px; height: 30px; background: var(--accent); border-radius: 9px; display: flex; align-items: center; justify-content: center; }
+.brand-mark svg { width: 14px; height: 14px; }
+.step-nav { display: flex; gap: 2px; }
+.sn {
+  padding: 8px 18px; border-radius: 20px; cursor: pointer;
+  font-size: 13px; font-weight: 600; color: var(--text3);
+  border: 1px solid transparent; transition: all .18s;
+  background: none; font-family: inherit; letter-spacing: .02em;
+}
+.sn:hover { color: var(--text2); background: var(--bg3); }
+.sn.active { background: var(--accent); color: #fff; border-color: var(--accent);  box-shadow: 0 0 0 2px rgba(124,106,248,0.25); }
+.sn.done { color: var(--accent); border-color: var(--border2); background: var(--accentdim); }
+.nav-right { display: flex; align-items: center; gap: 12px; }
+.nav-badge { font-size: 11px; color: var(--teal); background: var(--teallt); border: 1px solid var(--tealbdr); padding: 4px 12px; border-radius: 12px; font-weight: 600; }
+.av { width: 34px; height: 34px; border-radius: 50%; background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; }
+
+/* ── LAYOUT ── */
+.page { display: none; padding-top: 56px; min-height: 100vh; }
+.page.on { display: block; }
+.inner { max-width: var(--content); margin: 0 auto; padding: 0 48px; }
+
+/* ── PAGE HEADER ── */
+.ph {
+  background: var(--card); border-bottom: 1px solid var(--border);
+  padding: 28px 0 20px;
+  margin-bottom: 28px;
+}
+.ph .inner { display: flex; align-items: flex-end; justify-content: space-between; }
+.ph-left {}
+.ph-label { font-size: 10px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--text3); margin-bottom: 6px; display: flex; align-items: center; gap: 7px; }
+.ph-label::before { content: ''; width: 18px; height: 1px; background: var(--accent); display: inline-block; }
+.ph-title { font-family: 'Sora', sans-serif; font-size: 24px; font-weight: 600; color: var(--text1); line-height: 1.2; }
+.ph-sub { font-size: 12px; color: var(--text2); margin-top: 5px; line-height: 1.5; }
+
+/* ── PYRAMID ── */
+.pyr { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 0 0 28px; }
+.pyr-tier {
+  display: flex; align-items: center; justify-content: center; font-family: 'Sora', sans-serif;
+  border-radius: 10px; font-size: 12px; font-weight: 600; height: 35px; padding: 0 20px; 
+  transition: all .2s; letter-spacing: .04em;
+}
+
+/* ── GRID ── */
+.g4 { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 14px; }
+.g3 { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 14px; }
+.g2 { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 14px; }
+.g2-np { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
+.sec { font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--text3); margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+.sec::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+.sp8 { height: 8px; } .sp16 { height: 16px; } .sp24 { height: 24px; } .sp32 { height: 32px; }
+
+/* ── METRIC CARD ── */
+.mcard {
+  background: var(--card2); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 18px 20px;
+  position: relative; overflow: hidden; transition: border-color .2s;
+}
+.mcard::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background: var(--bar-color, var(--accent)); border-radius:2px 2px 0 0; }
+.mcard:hover { border-color: var(--border2); }
+.mc-lbl { font-size: 10px; color: var(--text3); font-weight: 600; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px; }
+.mc-val { font-family: 'Sora', sans-serif; font-size: 26px; font-weight: 700; color: var(--text1); line-height: 1; }
+.mc-sub { font-size: 11px; color: var(--text2); margin-top: 5px; }
+.mc-pill { display: inline-flex; align-items: center; font-size: 10px; font-weight: 500; padding: 3px 9px; border-radius: 10px; margin-top: 8px; }
+.pill-g { background: var(--greenlt); color: var(--green); border: 1px solid var(--greenbdr); }
+.pill-b { background: var(--purplelt); color: var(--purple); border: 1px solid var(--purplebdr); }
+.pill-a { background: var(--amberlt); color: var(--amber); border: 1px solid var(--amberbdr); }
+.pill-t { background: var(--teallt); color: var(--teal); border: 1px solid var(--tealbdr); }
+
+/* ── CARD ── */
+.card {
+  background: var(--card2); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 20px 22px;
+  transition: border-color .2s;
+}
+.card:hover { border-color: var(--border2); }
+.ch { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.ct { font-size: 13px; font-weight: 600; color: var(--text1); }
+.ctag { font-size: 10px; padding: 3px 9px; border-radius: 8px; background: var(--bg4); color: var(--text3); border: 1px solid var(--border); }
+
+/* ── BARS ── */
+.ibar { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.ibl { font-size: 11px; color: var(--text2); width: 86px; flex-shrink: 0; }
+.ibt { flex: 1; height: 6px; background: var(--bg4); border-radius: 3px; overflow: hidden; }
+.ibf { height: 100%; border-radius: 3px; }
+.ibv { font-size: 11px; font-weight: 600; color: var(--text1); width: 36px; text-align: right; }
+
+/* ── BUTTONS ── */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 9px 20px; border-radius: var(--radius-sm);
+  font-size: 12px; font-weight: 500; cursor: pointer;
+  border: 1px solid var(--border2); background: var(--card2); color: var(--text1);
+  transition: all .16s; font-family: inherit;
+}
+.btn:hover { background: var(--bg4); border-color: var(--border2); }
+.btn-p { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-p:hover { background: var(--accent2); border-color: var(--accent2); }
+.btn-sm { padding: 7px 14px; font-size: 11px; border-radius: 8px; }
+.btn-full { width: 100%; }
+.btn-teal { background: var(--teallt); color: var(--teal); border-color: var(--tealbdr); }
+.btn-teal:hover { background: rgba(45,212,160,0.18); }
+
+/* ── UPLOAD ZONE ── */
+.upload-zone {
+  border: 1.5px dashed var(--border2); border-radius: var(--radius);
+  padding: 28px 24px; text-align: center; cursor: pointer;
+  background: var(--card); transition: all .2s;
+}
+.upload-zone:hover { border-color: var(--accent); background: var(--accentdim); }
+.upload-icon-wrap {
+  width: 40px; height: 40px; background: var(--bg4); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; margin: 0 auto 10px;
+}
+.upload-zone .ut { font-size: 12px; color: var(--text2); }
+.upload-zone .ut span { color: var(--accent); font-weight: 500; cursor: pointer; }
+.upload-zone .us { font-size: 10px; color: var(--text3); margin-top: 4px; }
+
+/* ── DB CONNECT PANEL ── */
+.db-panel {
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-top: 16px;
+}
+.db-panel-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 20px; border-bottom: 1px solid var(--border); background: var(--card2);
+  cursor: pointer; user-select: none;
+}
+.db-panel-head:hover { background: var(--bg4); }
+.db-head-left { display: flex; align-items: center; gap: 10px; }
+.db-head-icon { width: 28px; height: 28px; background: var(--bluelt); border: 1px solid var(--bluebdr); border-radius: 7px; display: flex; align-items: center; justify-content: center; }
+.db-title { font-size: 12px; font-weight: 600; color: var(--text1); }
+.db-sub { font-size: 10px; color: var(--text3); margin-top: 1px; }
+.db-body { padding: 20px; display: none; }
+.db-body.open { display: block; }
+.db-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+.db-field { display: flex; flex-direction: column; gap: 5px; }
+.db-field label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--text3); }
+.db-field input, .db-field select {
+  background: var(--bg3); border: 1px solid var(--border2); border-radius: var(--radius-sm);
+  padding: 9px 12px; font-size: 12px; color: var(--text1); font-family: inherit;
+  outline: none; transition: border-color .2s;
+}
+.db-field input:focus, .db-field select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124,106,248,.1); }
+.db-field select option { background: var(--bg3); }
+.db-field input[type="password"] { letter-spacing: .1em; }
+.db-actions { display: flex; gap: 10px; align-items: center; }
+.db-status { font-size: 11px; color: var(--text3); }
+.db-status.ok { color: var(--green); }
+.db-status.err { color: var(--coral); }
+.db-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+.db-chip {
+  display: flex; align-items: center; gap: 6px; padding: 5px 10px;
+  background: var(--bg4); border: 1px solid var(--border); border-radius: 8px;
+  font-size: 10px; font-weight: 500; color: var(--text2); cursor: pointer; transition: all .15s;
+}
+.db-chip:hover { border-color: var(--accent); color: var(--accent); }
+.db-chip.connected { border-color: var(--greenbdr); color: var(--green); background: var(--greenlt); }
+.db-chip-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text3); }
+.db-chip.connected .db-chip-dot { background: var(--green); }
+
+/* ── DOC TABLE ── */
+.tbl-wrap { overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--border); }
+.doc-table { width: 100%; border-collapse: collapse; table-layout: fixed; min-width: 700px; }
+.doc-table th {
+  font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--text3); padding: 11px 14px; text-align: left;
+  background: var(--bg4); border-bottom: 1px solid var(--border);
+}
+.doc-table td { padding: 12px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.doc-table tbody tr:last-child td { border-bottom: none; }
+.doc-table tbody tr:hover td { background: var(--bg4); }
+.ft-badge { display: inline-flex; align-items: center; font-size: 9px; font-weight: 700; padding: 3px 8px; border-radius: 6px; letter-spacing: .05em; }
+.sdot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; margin-right: 5px; vertical-align: middle; }
+.action-pills { display: flex; flex-wrap: wrap; gap: 4px; }
+.apill {
+  font-size: 9px; font-weight: 500; padding: 3px 9px; border-radius: 8px;
+  border: 1px solid var(--border); color: var(--text3); background: var(--bg4);
+  cursor: default; transition: all .15s;
+}
+.apill.done { background: var(--greenlt); color: var(--green); border-color: var(--greenbdr); }
+.apill.active { background: var(--purplelt); color: var(--purple); border-color: var(--purplebdr); animation: pillpulse 1.4s infinite; }
+@keyframes pillpulse { 0%,100%{opacity:1}50%{opacity:.55} }
+
+/* ── PROGRESS ── */
+.prog-wrap { margin-top: 14px; }
+.prog-lbl { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 11px; color: var(--text2); }
+.prog-t { height: 5px; background: var(--bg4); border-radius: 3px; overflow: hidden; }
+.prog-f { height: 100%; border-radius: 3px; background: var(--accent); transition: width .6s ease; }
+
+/* ── PROMPT ── */
+.prompt-box {
+  width: 100%; background: var(--bg3); border: 1px solid var(--border2);
+  border-radius: var(--radius); padding: 14px 16px;
+  font-family: 'DM Sans', sans-serif; font-size: 13px; color: var(--text1);
+  resize: vertical; min-height: 88px; outline: none; transition: border-color .2s; line-height: 1.65;
+}
+.prompt-box:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124,106,248,.08); }
+.prompt-box::placeholder { color: var(--text3); }
+
+/* ── SLM SCORING PANEL ── */
+.score-meter-wrap { display: flex; align-items: center; gap: 16px; margin: 16px 0; }
+.score-ring-svg {}
+.score-info { flex: 1; }
+.score-title { font-size: 14px; font-weight: 600; color: var(--text1); margin-bottom: 4px; }
+.score-desc { font-size: 11px; color: var(--text2); line-height: 1.55; }
+.score-path-row { display: flex; gap: 8px; margin-top: 10px; }
+.score-path {
+  flex: 1; padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid;
+  font-size: 11px; font-weight: 500; cursor: pointer; transition: all .15s;
+}
+.sp-active { border-color: var(--greenbdr); background: var(--greenlt); color: var(--green); }
+.sp-warn { border-color: var(--amberbdr); background: var(--amberlt); color: var(--amber); }
+.sp-dim { border-color: var(--border); background: var(--bg4); color: var(--text3); opacity: .5; }
+
+.slm-block {
+  background: var(--card2); border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden;
+}
+.slm-head { padding: 16px 20px 12px; border-bottom: 1px solid var(--border); background: var(--bg4); }
+.slm-hrow { display: flex; align-items: center; justify-content: space-between; }
+.slm-ht { font-size: 13px; font-weight: 600; color: var(--text1); }
+.slm-hs { font-size: 11px; color: var(--text2); margin-top: 3px; }
+.slm-status-row { display: flex; align-items: flex-start; gap: 14px; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+.slm-icon { width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; border: 1px solid; }
+.slm-t { font-size: 12px; font-weight: 600; color: var(--text1); margin-bottom: 4px; }
+.slm-d { font-size: 11px; color: var(--text2); line-height: 1.55; }
+.slm-stat-row { display: flex; }
+.slm-stat { flex: 1; padding: 12px 16px; border-right: 1px solid var(--border); text-align: center; }
+.slm-stat:last-child { border-right: none; }
+.slm-sv { font-family: 'Sora', sans-serif; font-size: 18px; font-weight: 700; color: var(--text1); }
+.slm-sk { font-size: 10px; color: var(--text3); margin-top: 3px; }
+
+/* ── THINKING BAR ── */
+.thinking-bar {
+  display: flex; align-items: center; gap: 10px; padding: 13px 16px;
+  background: var(--purplelt); border-radius: var(--radius-sm); font-size: 11px;
+  color: var(--purple); border: 1px solid var(--purplebdr); transition: all .4s;
+}
+.think-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: blink 1.3s infinite; flex-shrink: 0; }
+.think-dot:nth-child(2){animation-delay:.22s}.think-dot:nth-child(3){animation-delay:.44s}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.12}}
+
+/* ── MODEL ROWS ── */
+.model-row {
+  display: flex; align-items: center; gap: 12px; padding: 13px 16px;
+  background: var(--card2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); margin-bottom: 8px; transition: all .15s;
+}
+.model-row:hover { border-color: var(--border2); background: var(--bg4); }
+.model-row.chosen { border-color: var(--teal); border-width: 1.5px; background: var(--teallt); }
+.model-row.chosen .mn { color: var(--teal); }
+.mdot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.mn { flex: 1; font-size: 12px; font-weight: 500; color: var(--text1); }
+.msub { font-size: 10px; color: var(--text3); margin-top: 2px; }
+.mscore { font-size: 13px; font-weight: 700; margin-right: 4px; }
+
+/* ── MIROFISH CANVAS ── */
+.miro-wrap {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden;
+}
+.miro-head { padding: 16px 20px 12px; border-bottom: 1px solid var(--border); background: var(--bg4); display: flex; align-items: center; justify-content: space-between; }
+.miro-canvas { padding: 8px; }
+#miroSvg { width: 100%; display: block; }
+
+/* ── TIMELINE ── */
+.tl-item { display: flex; gap: 14px; padding: 0 0 20px; position: relative; }
+.tl-item::before { content: ''; position: absolute; left: 17px; top: 36px; bottom: 0; width: 1px; background: var(--border); }
+.tl-item:last-child::before { display: none; }
+.tl-ic { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; border: 1px solid; }
+.tl-t { font-size: 12px; font-weight: 600; color: var(--text1); margin-bottom: 4px; }
+.tl-d { font-size: 11px; color: var(--text2); line-height: 1.55; }
+.chip { display: inline-block; font-size: 10px; padding: 2px 9px; border-radius: 8px; margin-top: 5px; font-weight: 500; }
+
+/* ── RESULT BOX ── */
+.result-box {
+  background: var(--card2); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 20px 22px;
+}
+.result-text { font-size: 12px; line-height: 1.85; color: var(--text2); }
+.result-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.result-meta { font-size: 11px; color: var(--text3); }
+
+/* ── SESSION ROWS ── */
+.sess-row { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--card2); border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 8px; transition: border-color .15s; }
+.sess-row:hover { border-color: var(--border2); }
+.fi { width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; color: #fff; flex-shrink: 0; }
+.fn { font-size: 12px; font-weight: 500; color: var(--text1); }
+.fm { font-size: 10px; color: var(--text3); margin-top: 2px; }
+
+/* ── DONUT ── */
+.donut-wrap { display: flex; align-items: center; gap: 18px; }
+.leg-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 11px; color: var(--text2); }
+.leg-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+/* ── REASONING ── */
+.rc-stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 0; margin-bottom: 14px; }
+.rc-stat { text-align: center; padding: 10px 0; }
+.rc-stat + .rc-stat { border-left: 1px solid var(--border); }
+.rc-sv { font-family: 'Sora', sans-serif; font-size: 20px; font-weight: 700; }
+.rc-sk { font-size: 10px; color: var(--text3); margin-top: 3px; }
+.rc-note { font-size: 11px; color: var(--text2); line-height: 1.7; padding-top: 12px; border-top: 1px solid var(--border); }
+
+/* ── DIVIDER ── */
+.divider { height: 1px; background: var(--border); margin: 24px 0; }
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<nav class="topbar">
+  <a class="brand" href="#">
+    <div class="brand-mark">
+      <svg viewBox="0 0 14 14" fill="none"><polygon points="7,1 13,13 1,13" fill="white" opacity=".95"/></svg>
+    </div>
+    AI-Orchestrator-Demo
+  </a>
+  <div class="step-nav">
+    <button class="sn done"   onclick="go(0)" id="s0">Dashboard</button>
+    <button class="sn active" onclick="go(1)" id="s1">① Inject</button>
+    <button class="sn"        onclick="go(2)" id="s2">② Prompt</button>
+    <button class="sn"        onclick="go(3)" id="s3">③ Model</button>
+    <button class="sn"        onclick="go(4)" id="s4">④ Results</button>
+  </div>
+  <div class="nav-right">
+    <span class="nav-badge">● Live</span>
+    <span style="font-size:11px;color:var(--text3)">Rahul M.</span>
+    <div class="av">RM</div>
+  </div>
+</nav>
+
+
+<!-- ═══════════════════════════════════════════════════
+     PAGE 0 — DASHBOARD
+════════════════════════════════════════════════════ -->
+<div class="page" id="pg0">
+  <div class="ph">
+    <div class="inner">
+      <div class="ph-left">
+        <div class="ph-label">Workspace overview</div>
+        <div class="ph-title">Intelligence Dashboard</div>
+        <div class="ph-sub">Token savings, SLM usage &amp; pipeline health at a glance</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="inner">
+    <!-- Pyramid -->
+    <div class="pyr" style="padding-top:4px">
+      <div class="pyr-tier" style="width:130px;background:rgba(167,139,250,.1);border:1px solid rgba(167,139,250,.3);color:#a78bfa">Result layer</div>
+      <div class="pyr-tier" style="width:230px;background:rgba(45,212,160,.08);border:1px solid rgba(45,212,160,.25);color:#2dd4a0">Model selection</div>
+      <div class="pyr-tier" style="width:340px;background:rgba(251,113,133,.08);border:1px solid rgba(251,113,133,.25);color:#fb7185">SLM engine</div>
+      <div class="pyr-tier" style="width:460px;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);color:#fbbf24">Data + GraphRAG foundation</div>
+    </div>
+
+    <div class="sec">Key metrics</div>
+    <div class="g4">
+      <div class="mcard" style="--bar-color:var(--green)"><div class="mc-lbl">Tokens saved</div><div class="mc-val">2.4M</div><div class="mc-sub">this month</div><div class="mc-pill pill-g">↓ 68% vs GPT-4</div></div>
+      <div class="mcard" style="--bar-color:var(--accent)"><div class="mc-lbl">SLMs active</div><div class="mc-val">14</div><div class="mc-sub">trained models</div><div class="mc-pill pill-b">+3 this week</div></div>
+      <div class="mcard" style="--bar-color:var(--blue)"><div class="mc-lbl">Files ingested</div><div class="mc-val">47</div><div class="mc-sub">PDF · DOCX · XLSX</div><div class="mc-pill pill-b">+2 sources</div></div>
+      <div class="mcard" style="--bar-color:var(--amber)"><div class="mc-lbl">Cost saved</div><div class="mc-val">$840</div><div class="mc-sub">this month</div><div class="mc-pill pill-a">83% efficiency</div></div>
+    </div>
+
+    <div class="sp24"></div>
+    <div class="g2">
+      <div class="card">
+        <div class="ch"><span class="ct">Token usage reduction</span><span class="ctag">Last 7 sessions</span></div>
+        <div class="ibar"><span class="ibl">Without SLM</span><div class="ibt"><div class="ibf" style="width:100%;background:var(--border2)"></div></div><span class="ibv">100%</span></div>
+        <div class="ibar"><span class="ibl">With SLM</span><div class="ibt"><div class="ibf" style="width:32%;background:var(--accent)"></div></div><span class="ibv">32%</span></div>
+        <div class="ibar"><span class="ibl">GraphRAG</span><div class="ibt"><div class="ibf" style="width:18%;background:var(--teal)"></div></div><span class="ibv">18%</span></div>
+        <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--text2)">
+          <span style="color:var(--green);font-weight:600">68% avg reduction</span> using your SLM library
+        </div>
+      </div>
+      <div class="card">
+        <div class="ch"><span class="ct">SLM hit rate</span><span class="ctag">Reuse vs create</span></div>
+        <div class="donut-wrap">
+          <svg width="80" height="80" viewBox="0 0 80 80">
+            <circle cx="40" cy="40" r="29" fill="none" stroke="#1a1a28" stroke-width="12"/>
+            <circle cx="40" cy="40" r="29" fill="none" stroke="#7c6af8" stroke-width="12" stroke-dasharray="118 64" stroke-dashoffset="0" transform="rotate(-90 40 40)"/>
+            <circle cx="40" cy="40" r="29" fill="none" stroke="#2dd4a0" stroke-width="12" stroke-dasharray="40 142" stroke-dashoffset="-118" transform="rotate(-90 40 40)"/>
+            <text x="40" y="44" text-anchor="middle" font-size="12" font-weight="700" fill="#e8e6f0" font-family="Sora,sans-serif">65%</text>
+          </svg>
+          <div>
+            <div class="leg-row"><div class="leg-dot" style="background:#7c6af8"></div>SLM reused — 65%</div>
+            <div class="leg-row"><div class="leg-dot" style="background:#2dd4a0"></div>New SLM created — 22%</div>
+            <div class="leg-row"><div class="leg-dot" style="background:#2a2a3d"></div>Full LLM fallback — 13%</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sp24"></div>
+    <div class="sec">Recent sessions</div>
+    <div class="sess-row"><div class="fi" style="background:#7c6af8">SLM</div><div style="flex:1"><div class="fn">Legal contract summarisation</div><div class="fm">SLM matched · 2,340 tokens saved · claude-haiku-4</div></div><span class="mc-pill pill-g">↓ 91%</span></div>
+    <div class="sess-row"><div class="fi" style="background:#2dd4a0">NEW</div><div style="flex:1"><div class="fn">Inventory reorder analysis</div><div class="fm">New SLM created · GraphRAG built · gpt-4o-mini</div></div><span class="mc-pill pill-a">↓ 62%</span></div>
+    <div class="sess-row"><div class="fi" style="background:#4ade80">SLM</div><div style="flex:1"><div class="fn">HR policy Q&amp;A</div><div class="fm">SLM matched · 5,120 tokens saved · gemini-flash</div></div><span class="mc-pill pill-g">↓ 88%</span></div>
+
+    <div class="sp24"></div>
+    <button class="btn btn-p btn-full" onclick="go(1)">Start new session →</button>
+    <div class="sp32"></div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════
+     PAGE 1 — DATA INJECTION
+════════════════════════════════════════════════════ -->
+<div class="page on" id="pg1">
+  <div class="ph">
+    <div class="inner">
+      <div class="ph-left">
+        <div class="ph-label">Step 1 of 4 · Foundation layer</div>
+        <div class="ph-title">Data Injection &amp; GraphRAG</div>
+        <div class="ph-sub">Upload files or connect to a database — system cleans, labels, maps entities &amp; builds knowledge graph</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="inner">
+    <!-- Pyramid indicator -->
+    <div class="pyr">
+      <div class="pyr-tier" style="width:80px;background:var(--bg4);border:1px solid var(--border);color:var(--text3);font-size:12px">Result</div>
+      <div class="pyr-tier" style="width:160px;background:var(--bg4);border:1px solid var(--border);color:var(--text3);font-size:12px">Model select</div>
+      <div class="pyr-tier" style="width:250px;background:var(--bg4);border:1px solid var(--border);color:var(--text3);font-size:12px">SLM engine</div>
+      <div class="pyr-tier" style="width:360px;background:rgba(251,191,36,.1);border:1.5px solid rgba(251,191,36,.4);color:#fbbf24;font-weight:600;font-size:12px">▶ Data + GraphRAG — active</div>
+    </div>
+
+    <!-- Source tabs -->
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <button class="btn btn-sm" id="tab-file" onclick="switchTab('file')" style="border-color:var(--accent);color:var(--accent);background:var(--accentdim)">File upload</button>
+      <button class="btn btn-sm" id="tab-db" onclick="switchTab('db')">Database connect</button>
+    </div>
+
+    <!-- File Upload section -->
+    <div id="section-file">
+      <div class="upload-zone" onclick="addDoc()">
+        <div class="upload-icon-wrap">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <path d="M9 2.5v10M6 5.5l3-3 3 3M3 13h12v2H3z" stroke="#7c6af8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="ut">Drop files or <span>click to browse</span></div>
+        <div class="us">Supports PDF · DOCX · XLSX · CSV · TXT — multiple files allowed</div>
+      </div>
+    </div>
+
+    <!-- DB Connect section -->
+    <div id="section-db" style="display:none">
+      <div class="db-panel">
+        <div class="db-panel-head" onclick="toggleDB(this)">
+          <div class="db-head-left">
+            <div class="db-head-icon">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <ellipse cx="7" cy="4" rx="5" ry="2" stroke="#60a5fa" stroke-width="1.2"/>
+                <path d="M2 4v3c0 1.1 2.24 2 5 2s5-.9 5-2V4" stroke="#60a5fa" stroke-width="1.2"/>
+                <path d="M2 7v3c0 1.1 2.24 2 5 2s5-.9 5-2V7" stroke="#60a5fa" stroke-width="1.2"/>
+              </svg>
+            </div>
+            <div>
+              <div class="db-title">Database connection</div>
+              <div class="db-sub">Connect your data source securely</div>
+            </div>
+          </div>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" class="db-chevron"><path d="M3 5l4 4 4-4" stroke="#5c5a78" stroke-width="1.4" stroke-linecap="round"/></svg>
+        </div>
+        <div class="db-body" id="dbBody">
+          <div class="db-grid">
+            <div class="db-field">
+              <label>Database type</label>
+              <select>
+                <option>PostgreSQL</option>
+                <option>MySQL</option>
+                <option>MongoDB</option>
+                <option>Snowflake</option>
+                <option>BigQuery</option>
+                <option>Microsoft SQL Server</option>
+                <option>Oracle DB</option>
+                <option>Redis</option>
+              </select>
+            </div>
+            <div class="db-field">
+              <label>Host / Endpoint</label>
+              <input type="text" placeholder="db.example.com" id="dbHost">
+            </div>
+            <div class="db-field">
+              <label>Port</label>
+              <input type="text" placeholder="5432" id="dbPort">
+            </div>
+            <div class="db-field">
+              <label>Database name</label>
+              <input type="text" placeholder="production_db" id="dbName">
+            </div>
+            <div class="db-field">
+              <label>Username</label>
+              <input type="text" placeholder="admin" id="dbUser">
+            </div>
+            <div class="db-field">
+              <label>Password</label>
+              <input type="password" placeholder="••••••••••" id="dbPass">
+            </div>
+          </div>
+          <div class="db-field" style="margin-bottom:16px">
+            <label>Schema / Collection (optional)</label>
+            <input type="text" placeholder="public, sales_schema…" id="dbSchema">
+          </div>
+          <div class="db-actions">
+            <button class="btn btn-p btn-sm" onclick="testConn()">Test connection</button>
+            <button class="btn btn-sm" onclick="connectDB()">Connect &amp; ingest</button>
+            <span class="db-status" id="dbStatus">Not connected</span>
+          </div>
+          <div class="db-chips">
+            <div class="db-chip connected" id="chip-pg"><span class="db-chip-dot"></span>PostgreSQL · prod-db</div>
+            <div class="db-chip" onclick="this.classList.add('connected');this.querySelector('.db-chip-dot').style.background='var(--green)'"><span class="db-chip-dot"></span>MySQL · analytics</div>
+            <div class="db-chip" onclick="this.classList.add('connected');this.querySelector('.db-chip-dot').style.background='var(--green)'"><span class="db-chip-dot"></span>Snowflake · warehouse</div>
+            <div class="db-chip" style="border-style:dashed;color:var(--text3)">+ Add new source</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sp16"></div>
+
+    <!-- Doc Table -->
+    <div class="sec">Injected documents</div>
+    <div class="tbl-wrap">
+      <table class="doc-table">
+        <thead>
+          <tr>
+            <th style="width:32%">Document</th>
+            <th style="width:10%">Type</th>
+            <th style="width:20%">Curation status</th>
+            <th style="width:38%">Pipeline actions</th>
+          </tr>
+        </thead>
+        <tbody id="docTbody">
+          <tr>
+            <td><div style="font-size:12px;font-weight:500;color:var(--text1)">Q3_Financial_Report.pdf</div><div style="font-size:10px;color:var(--text3);margin-top:2px">2.4 MB · 142 entities · 89 relations</div></td>
+            <td><span class="ft-badge" style="background:rgba(251,113,133,.12);color:#fb7185;border:1px solid rgba(251,113,133,.3)">PDF</span></td>
+            <td><span class="sdot" style="background:#4ade80"></span><span style="font-size:11px;color:#4ade80;font-weight:500">GraphRAG ready</span></td>
+            <td><div class="action-pills"><span class="apill done">Cleaned</span><span class="apill done">Labelled</span><span class="apill done">Entities mapped</span><span class="apill done">GraphRAG built</span></div></td>
+          </tr>
+          <tr>
+            <td><div style="font-size:12px;font-weight:500;color:var(--text1)">HR_Policy_Manual.docx</div><div style="font-size:10px;color:var(--text3);margin-top:2px">1.1 MB · 78 entities · 54 relations</div></td>
+            <td><span class="ft-badge" style="background:rgba(167,139,250,.12);color:#a78bfa;border:1px solid rgba(167,139,250,.3)">DOCX</span></td>
+            <td><span class="sdot" style="background:#4ade80"></span><span style="font-size:11px;color:#4ade80;font-weight:500">GraphRAG ready</span></td>
+            <td><div class="action-pills"><span class="apill done">Cleaned</span><span class="apill done">Labelled</span><span class="apill done">Entities mapped</span><span class="apill done">GraphRAG built</span></div></td>
+          </tr>
+          <tr>
+            <td><div style="font-size:12px;font-weight:500;color:var(--text1)">Inventory_Master.xlsx</div><div style="font-size:10px;color:var(--text3);margin-top:2px">890 KB · processing…</div></td>
+            <td><span class="ft-badge" style="background:rgba(45,212,160,.12);color:#2dd4a0;border:1px solid rgba(45,212,160,.3)">XLSX</span></td>
+            <td><span class="sdot" style="background:#fbbf24;animation:pillpulse 1.2s infinite"></span><span style="font-size:11px;color:#fbbf24;font-weight:500">Processing</span></td>
+            <td><div class="action-pills"><span class="apill done">Cleaned</span><span class="apill active">Labelling…</span><span class="apill">Entity map</span><span class="apill">GraphRAG</span></div></td>
+          </tr>
+          <tr>
+            <td><div style="font-size:12px;font-weight:500;color:var(--text1)">Sales_Pipeline_Q4.csv</div><div style="font-size:10px;color:var(--text3);margin-top:2px">340 KB · queued</div></td>
+            <td><span class="ft-badge" style="background:rgba(251,191,36,.12);color:#fbbf24;border:1px solid rgba(251,191,36,.3)">CSV</span></td>
+            <td><span class="sdot" style="background:var(--border2)"></span><span style="font-size:11px;color:var(--text3);font-weight:500">Queued</span></td>
+            <td><div class="action-pills"><span class="apill">Clean</span><span class="apill">Label</span><span class="apill">Entity map</span><span class="apill">GraphRAG</span></div></td>
+          </tr>
+          <tr>
+            <td><div style="font-size:12px;font-weight:500;color:var(--text1)">PostgreSQL · prod-db</div><div style="font-size:10px;color:var(--text3);margin-top:2px">DB source · 12 tables · syncing…</div></td>
+            <td><span class="ft-badge" style="background:rgba(96,165,250,.12);color:#60a5fa;border:1px solid rgba(96,165,250,.3)">DB</span></td>
+            <td><span class="sdot" style="background:#4ade80"></span><span style="font-size:11px;color:#4ade80;font-weight:500">GraphRAG ready</span></td>
+            <td><div class="action-pills"><span class="apill done">Cleaned</span><span class="apill done">Schema mapped</span><span class="apill done">Entities mapped</span><span class="apill done">GraphRAG built</span></div></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="prog-wrap">
+      <div class="prog-lbl"><span>Overall GraphRAG construction</span><span>74%</span></div>
+      <div class="prog-t"><div class="prog-f" style="width:74%"></div></div>
+    </div>
+    <div class="prog-wrap">
+      <div class="prog-lbl"><span>Entity relationship mapping</span><span>89%</span></div>
+      <div class="prog-t"><div class="prog-f" style="width:89%;background:var(--teal)"></div></div>
+    </div>
+
+    <div class="sp24"></div>
+    <div class="g2-np">
+      <button class="btn" onclick="go(0)">← Back</button>
+      <button class="btn btn-p" onclick="go(2)">Continue to prompt →</button>
+    </div>
+    <div class="sp32"></div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════
+     PAGE 2 — PROMPT + SLM
+════════════════════════════════════════════════════ -->
+<div class="page" id="pg2">
+  <div class="ph">
+    <div class="inner">
+      <div class="ph-left">
+        <div class="ph-label">Step 2 of 4 · SLM engine</div>
+        <div class="ph-title">Prompt &amp; SLM intelligence</div>
+        <div class="ph-sub">Internal GPT scores your request against the SLM library and decides the optimal routing path</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="inner">
+    <div class="pyr">
+      <div class="pyr-tier" style="width:80px;background:var(--bg4);border:1px solid var(--border);color:var(--text3);font-size:12px">Result</div>
+      <div class="pyr-tier" style="width:160px;background:var(--bg4);border:1px solid var(--border);color:var(--text3);font-size:12px">Model select</div>
+      <div class="pyr-tier" style="width:250px;background:rgba(251,113,133,.1);border:1.5px solid rgba(251,113,133,.4);color:#fb7185;font-weight:600;font-size:12px">▶ SLM engine — active</div>
+      <div class="pyr-tier" style="width:360px;background:var(--bg4);border:1px solid var(--border);color:var(--text3);font-size:12px">Data + GraphRAG — done ✓</div>
+    </div>
+
+    <div class="sec">Your request</div>
+    <textarea class="prompt-box" id="promptTxt" placeholder="Describe what you need from your data…">Summarise the top 5 inventory items by revenue from Q3 data and flag any anomalies in the reorder cycle.</textarea>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
+      <span style="font-size:11px;color:var(--text3)">Internal GPT scans &amp; routes automatically — no manual SLM selection needed</span>
+      <button class="btn btn-p btn-sm" onclick="runSLM(this)">Analyse ↗</button>
+    </div>
+
+    <div class="sp16"></div>
+    <div class="thinking-bar" id="thinkBar">
+      <div class="think-dot"></div><div class="think-dot"></div><div class="think-dot"></div>
+      <span id="thinkText">Internal GPT scanning SLM library… comparing against 14 trained models</span>
+    </div>
+
+    <div class="sp16"></div>
+
+    <!-- Score meter -->
+    <div class="slm-block">
+      <div class="slm-head">
+        <div class="slm-hrow">
+          <span class="slm-ht">SLM routing decision</span>
+          <span class="ft-badge" style="background:var(--greenlt);color:var(--green);border:1px solid var(--greenbdr);padding:4px 11px;font-size:10px">✓ Route: Reuse SLM</span>
+        </div>
+        <div class="slm-hs">Score above 80 threshold — existing SLM selected automatically</div>
+      </div>
+
+      <!-- Score ring + paths -->
+      <div style="padding:20px 22px;border-bottom:1px solid var(--border)">
+        <div class="score-meter-wrap">
+          <svg class="score-ring-svg" width="88" height="88" viewBox="0 0 88 88">
+            <circle cx="44" cy="44" r="34" fill="none" stroke="#1a1a28" stroke-width="10"/>
+            <circle cx="44" cy="44" r="34" fill="none" stroke="#4ade80" stroke-width="10"
+              stroke-dasharray="201" stroke-dashoffset="50" transform="rotate(-90 44 44)" stroke-linecap="round"/>
+            <text x="44" y="41" text-anchor="middle" font-size="16" font-weight="700" fill="#e8e6f0" font-family="Sora,sans-serif">94</text>
+            <text x="44" y="53" text-anchor="middle" font-size="8" fill="#5c5a78" font-family="DM Sans,sans-serif">/100</text>
+          </svg>
+          <div class="score-info">
+            <div class="score-title">Match score: 94 — inventory-analysis-v2</div>
+            <div class="score-desc">Internal GPT found a highly relevant SLM. Score exceeds the 80-point threshold — the existing SLM is reused directly. It has been updated with the latest GraphRAG context and persisted for future prompts.</div>
+          </div>
+        </div>
+
+        <!-- Three routing paths -->
+        <div class="score-path-row">
+          <div class="score-path sp-active">
+            <div style="font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-bottom:4px">Score ≥ 80 — Active</div>
+            <div style="font-size:11px;opacity:.85">Reuse existing SLM as-is. Update with new GraphRAG context. Highest token efficiency.</div>
+          </div>
+          <div class="score-path sp-dim">
+            <div style="font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-bottom:4px">Score 50–79 — Inactive</div>
+            <div style="font-size:11px;opacity:.8">Modify existing SLM: merge new domain knowledge, retrain on gaps. Internal GPT auto-triggers.</div>
+          </div>
+          <div class="score-path sp-dim">
+            <div style="font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-bottom:4px">Score &lt; 50 — Inactive</div>
+            <div style="font-size:11px;opacity:.8">Create new SLM from GraphRAG. Internal GPT auto-builds &amp; saves to library for future reuse.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="slm-status-row" style="background:rgba(74,222,128,.05)">
+        <div class="slm-icon" style="background:rgba(74,222,128,.1);border-color:rgba(74,222,128,.3)">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13.5 4L6.5 11.5 2.5 7.5" stroke="#4ade80" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div>
+          <div class="slm-t" style="color:var(--green)">Reusing: inventory-analysis-v2</div>
+          <div class="slm-d">94% confidence · trained on inventory &amp; finance docs · updated with latest GraphRAG context · saved for all future prompts with similar domain</div>
+        </div>
+      </div>
+      <div class="slm-stat-row">
+        <div class="slm-stat"><div class="slm-sv">8.2k</div><div class="slm-sk">Parameters</div></div>
+        <div class="slm-stat"><div class="slm-sv" style="color:var(--green)">94%</div><div class="slm-sk">Match score</div></div>
+        <div class="slm-stat"><div class="slm-sv" style="color:var(--green)">↓ 82%</div><div class="slm-sk">Token saving</div></div>
+        <div class="slm-stat"><div class="slm-sv">12d</div><div class="slm-sk">Age</div></div>
+      </div>
+    </div>
+
+    <div class="sp24"></div>
+    <div class="g2-np">
+      <button class="btn" onclick="go(1)">← Back</button>
+      <button class="btn btn-p" onclick="go(3)">Proceed to model select →</button>
+    </div>
+    <div class="sp32"></div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════
+     PAGE 3 — MODEL SELECT + MIROFISH
+════════════════════════════════════════════════════ -->
+<div class="page" id="pg3">
+  <div class="ph">
+    <div class="inner">
+      <div class="ph-left">
+        <div class="ph-label">Step 3 of 4 · Model selection</div>
+        <div class="ph-title">Model Routing &amp; Connection Map</div>
+        <div class="ph-sub">System selects the optimal model and visualises how every component connects to deliver your result</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="inner">
+    <div class="pyr">
+      <div class="pyr-tier" style="width:80px;background:var(--bg4);border:1px solid var(--border);color:var(--text3);font-size:12px">Result</div>
+      <div class="pyr-tier" style="width:160px;background:rgba(45,212,160,.1);border:1.5px solid rgba(45,212,160,.4);color:#2dd4a0;font-weight:600;font-size:12px">▶ Model select — active</div>
+      <div class="pyr-tier" style="width:250px;background:var(--bg4);border:1px solid var(--border);color:var(--text3);font-size:12px">SLM engine — done ✓</div>
+      <div class="pyr-tier" style="width:360px;background:var(--bg4);border:1px solid var(--border);color:var(--text3);font-size:12px">Data + GraphRAG — done ✓</div>
+    </div>
+    
+
+    <div class="sec">Available models — ranked by suitability</div>
+    <div class="model-row chosen">
+      <div class="mdot" style="background:#4ade80"></div>
+      <div style="flex:1"><div class="mn">claude-haiku-4 + inventory-analysis-v2 SLM</div><div class="msub">Optimal: fast, low-cost, SLM covers all domain logic</div></div>
+      <span class="mscore" style="color:var(--green)">98</span>
+      <span style="font-size:10px;color:var(--text3);margin-right:8px">pts</span>
+      <span class="ft-badge" style="background:var(--greenlt);color:var(--green);border:1px solid var(--greenbdr)">✓ Chosen</span>
+    </div>
+    <div class="model-row"><div class="mdot" style="background:#7c6af8"></div><div style="flex:1"><div class="mn">gpt-4o-mini + SLM</div><div class="msub">Good: slightly higher latency</div></div><span class="mscore" style="color:var(--text3)">84 pts</span><span class="ft-badge" style="background:var(--bg4);color:var(--text3);border:1px solid var(--border)">Alt</span></div>
+    <div class="model-row"><div class="mdot" style="background:#fbbf24"></div><div style="flex:1"><div class="mn">gemini-2.0-flash + SLM</div><div class="msub">Good: strong on structured data</div></div><span class="mscore" style="color:var(--text3)">79 pts</span><span class="ft-badge" style="background:var(--bg4);color:var(--text3);border:1px solid var(--border)">Alt</span></div>
+    <div class="model-row"><div class="mdot" style="background:#fb7185"></div><div style="flex:1"><div class="mn">gpt-4o — full context, no SLM</div><div class="msub">Overkill: 5× token cost, no quality gain for this task</div></div><span class="mscore" style="color:var(--coral)">42 pts</span><span class="ft-badge" style="background:var(--corallt);color:var(--coral);border:1px solid var(--coralbdr)">Not recommended</span></div>
+
+    <div class="sp24"></div>
+
+    <!-- MIROFISH DIAGRAM -->
+    <div class="sec">Intelligence connection map — Mirofish view</div>
+    <div class="miro-wrap">
+      <div class="miro-head">
+        <div>
+          <div style="font-size:13px;font-weight:600;color:var(--text1)">How everything connects to produce your result</div>
+          <div style="font-size:11px;color:var(--text2);margin-top:2px">Each node shows its role in the pipeline — hover to explore</div>
+        </div>
+        <span class="ft-badge" style="background:var(--teallt);color:var(--teal);border:1px solid var(--tealbdr)">Live trace</span>
+      </div>
+      <div class="miro-canvas">
+        <svg id="miroSvg" viewBox="0 0 960 500" xmlns="http://www.w3.org/2000/svg" style="background:#0e0e14;border-radius:10px">
+          <defs>
+            <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M1 2L8 5L1 8" fill="none" stroke="#35354f" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+            </marker>
+            <marker id="arr-g" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M1 2L8 5L1 8" fill="none" stroke="#4ade80" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+            </marker>
+            <marker id="arr-a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M1 2L8 5L1 8" fill="none" stroke="#7c6af8" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+            </marker>
+            <filter id="glow"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          </defs>
+
+          <!-- BACKBONE SPINE -->
+          <line x1="100" y1="250" x2="860" y2="250" stroke="#1e1e2e" stroke-width="2"/>
+
+          <!-- CONNECTION LINES -->
+          <!-- Data sources → GraphRAG -->
+          <path d="M 178 130 Q 240 130 260 205" fill="none" stroke="#2a2a3d" stroke-width="1.2" marker-end="url(#arr)"/>
+          <path d="M 178 195 Q 225 195 260 215" fill="none" stroke="#2a2a3d" stroke-width="1.2" marker-end="url(#arr)"/>
+          <path d="M 178 250 L 260 250" fill="none" stroke="#2a2a3d" stroke-width="1.2" marker-end="url(#arr)"/>
+          <path d="M 178 310 Q 225 310 260 280" fill="none" stroke="#2a2a3d" stroke-width="1.2" marker-end="url(#arr)"/>
+          <path d="M 178 370 Q 240 370 260 295" fill="none" stroke="#2a2a3d" stroke-width="1.2" marker-end="url(#arr)"/>
+
+          <!-- GraphRAG → SLM Engine -->
+          <path d="M 338 250 L 398 250" fill="none" stroke="#4ade80" stroke-width="1.8" marker-end="url(#arr-g)" stroke-dasharray="4 3"/>
+
+          <!-- SLM Lib → SLM Engine -->
+          <path d="M 478 140 Q 478 190 478 210" fill="none" stroke="#7c6af8" stroke-width="1.2" marker-end="url(#arr-a)"/>
+
+          <!-- SLM Engine → Model Router -->
+          <path d="M 558 250 L 618 250" fill="none" stroke="#4ade80" stroke-width="1.8" marker-end="url(#arr-g)"/>
+
+          <!-- Model Router → claude-haiku -->
+          <path d="M 698 225 Q 740 190 762 175" fill="none" stroke="#4ade80" stroke-width="2" marker-end="url(#arr-g)"/>
+
+          <!-- Model Router → other models (dimmer) -->
+          <path d="M 700 250 L 762 250" fill="none" stroke="#2a2a3d" stroke-width="1" marker-end="url(#arr)"/>
+          <path d="M 698 272 Q 738 305 762 320" fill="none" stroke="#2a2a3d" stroke-width="1" marker-end="url(#arr)"/>
+
+          <!-- claude-haiku → Result -->
+          <path d="M 842 165 Q 880 165 900 220" fill="none" stroke="#4ade80" stroke-width="2" marker-end="url(#arr-g)"/>
+
+          <!-- GraphRAG label line -->
+          <line x1="298" y1="195" x2="298" y2="130" stroke="#1e1e2e" stroke-width="1" stroke-dasharray="3,3"/>
+
+          <!-- ── DATA SOURCE NODES (left column) ── -->
+          <!-- PDF -->
+          <rect x="66" y="112" width="112" height="36" rx="8" fill="#1a1a28" stroke="rgba(251,113,133,.35)" stroke-width="1"/>
+          <rect x="66" y="112" width="3" height="36" rx="1" fill="#fb7185"/>
+          <text x="80" y="125" font-size="9" font-weight="600" fill="#fb7185" font-family="DM Sans,sans-serif">PDF</text>
+          <text x="80" y="138" font-size="8.5" fill="#9390b0" font-family="DM Sans,sans-serif">Q3_Financial_Report</text>
+
+          <!-- DOCX -->
+          <rect x="66" y="177" width="112" height="36" rx="8" fill="#1a1a28" stroke="rgba(167,139,250,.35)" stroke-width="1"/>
+          <rect x="66" y="177" width="3" height="36" rx="1" fill="#a78bfa"/>
+          <text x="80" y="190" font-size="9" font-weight="600" fill="#a78bfa" font-family="DM Sans,sans-serif">DOCX</text>
+          <text x="80" y="203" font-size="8.5" fill="#9390b0" font-family="DM Sans,sans-serif">HR_Policy_Manual</text>
+
+          <!-- XLSX -->
+          <rect x="66" y="232" width="112" height="36" rx="8" fill="#1a1a28" stroke="rgba(45,212,160,.35)" stroke-width="1"/>
+          <rect x="66" y="232" width="3" height="36" rx="1" fill="#2dd4a0"/>
+          <text x="80" y="245" font-size="9" font-weight="600" fill="#2dd4a0" font-family="DM Sans,sans-serif">XLSX</text>
+          <text x="80" y="258" font-size="8.5" fill="#9390b0" font-family="DM Sans,sans-serif">Inventory_Master</text>
+
+          <!-- CSV -->
+          <rect x="66" y="292" width="112" height="36" rx="8" fill="#1a1a28" stroke="rgba(251,191,36,.35)" stroke-width="1"/>
+          <rect x="66" y="292" width="3" height="36" rx="1" fill="#fbbf24"/>
+          <text x="80" y="305" font-size="9" font-weight="600" fill="#fbbf24" font-family="DM Sans,sans-serif">CSV</text>
+          <text x="80" y="318" font-size="8.5" fill="#9390b0" font-family="DM Sans,sans-serif">Sales_Pipeline_Q4</text>
+
+          <!-- DB -->
+          <rect x="66" y="352" width="112" height="36" rx="8" fill="#1a1a28" stroke="rgba(96,165,250,.35)" stroke-width="1"/>
+          <rect x="66" y="352" width="3" height="36" rx="1" fill="#60a5fa"/>
+          <text x="80" y="365" font-size="9" font-weight="600" fill="#60a5fa" font-family="DM Sans,sans-serif">DB</text>
+          <text x="80" y="378" font-size="8.5" fill="#9390b0" font-family="DM Sans,sans-serif">PostgreSQL · prod-db</text>
+
+          <!-- "Data sources" label -->
+          <text x="122" y="100" text-anchor="middle" font-size="9" font-weight="600" fill="#5c5a78" font-family="DM Sans,sans-serif" letter-spacing="1">DATA SOURCES</text>
+
+          <!-- ── GRAPHRAG NODE ── -->
+          <ellipse cx="298" cy="250" rx="38" ry="46" fill="#13131c" stroke="rgba(251,191,36,.4)" stroke-width="1.5"/>
+          <text x="298" y="244" text-anchor="middle" font-size="11" font-weight="700" fill="#fbbf24" font-family="Sora,sans-serif">Graph</text>
+          <text x="298" y="258" text-anchor="middle" font-size="11" font-weight="700" fill="#fbbf24" font-family="Sora,sans-serif">RAG</text>
+          <text x="298" y="185" text-anchor="middle" font-size="9" font-weight="600" fill="#5c5a78" font-family="DM Sans,sans-serif" letter-spacing="1">KNOWLEDGE</text>
+
+          <!-- ── SLM ENGINE NODE ── -->
+          <rect x="398" y="214" width="160" height="72" rx="12" fill="#13131c" stroke="rgba(251,113,133,.5)" stroke-width="1.5"/>
+          <text x="478" y="238" text-anchor="middle" font-size="10" font-weight="700" fill="#fb7185" font-family="Sora,sans-serif">SLM Engine</text>
+          <text x="478" y="252" text-anchor="middle" font-size="9" fill="#9390b0" font-family="DM Sans,sans-serif">Internal GPT</text>
+          <text x="478" y="264" text-anchor="middle" font-size="9" fill="#9390b0" font-family="DM Sans,sans-serif">Score: 94/100</text>
+          <text x="478" y="278" text-anchor="middle" font-size="8" fill="#4ade80" font-family="DM Sans,sans-serif">→ Reuse SLM</text>
+
+          <!-- SLM engine glow -->
+          <rect x="398" y="214" width="160" height="72" rx="12" fill="none" stroke="rgba(251,113,133,.15)" stroke-width="8"/>
+
+          <!-- ── SLM LIBRARY NODE (above) ── -->
+          <rect x="428" y="90" width="100" height="44" rx="9" fill="#1a1a28" stroke="rgba(167,139,250,.4)" stroke-width="1"/>
+          <text x="478" y="107" text-anchor="middle" font-size="9" font-weight="700" fill="#a78bfa" font-family="Sora,sans-serif">SLM Library</text>
+          <text x="478" y="120" text-anchor="middle" font-size="8" fill="#9390b0" font-family="DM Sans,sans-serif">14 trained models</text>
+          <text x="478" y="132" text-anchor="middle" font-size="8" fill="#4ade80" font-family="DM Sans,sans-serif">inv-analysis-v2 ✓</text>
+
+          <!-- ── MODEL ROUTER NODE ── -->
+          <rect x="618" y="220" width="80" height="60" rx="10" fill="#13131c" stroke="rgba(45,212,160,.4)" stroke-width="1.5"/>
+          <text x="658" y="244" text-anchor="middle" font-size="9" font-weight="700" fill="#2dd4a0" font-family="Sora,sans-serif">Model</text>
+          <text x="658" y="257" text-anchor="middle" font-size="9" font-weight="700" fill="#2dd4a0" font-family="Sora,sans-serif">Router</text>
+          <text x="658" y="270" text-anchor="middle" font-size="8" fill="#5c5a78" font-family="DM Sans,sans-serif">98 pts</text>
+
+          <!-- ── MODEL OPTIONS (right) ── -->
+          <!-- haiku - CHOSEN -->
+          <rect x="762" y="145" width="120" height="40" rx="8" fill="#1a1a28" stroke="rgba(74,222,128,.5)" stroke-width="1.5"/>
+          <text x="822" y="160" text-anchor="middle" font-size="9" font-weight="700" fill="#4ade80" font-family="Sora,sans-serif">claude-haiku-4</text>
+          <text x="822" y="174" text-anchor="middle" font-size="8" fill="#9390b0" font-family="DM Sans,sans-serif">+ inv-analysis-v2 SLM</text>
+          <text x="875" y="152" font-size="7" font-weight="700" fill="#4ade80" font-family="DM Sans,sans-serif">✓</text>
+
+          <!-- gpt-4o-mini -->
+          <rect x="762" y="230" width="120" height="34" rx="8" fill="#1a1a28" stroke="#2a2a3d" stroke-width="1"/>
+          <text x="822" y="245" text-anchor="middle" font-size="9" fill="#5c5a78" font-family="DM Sans,sans-serif">gpt-4o-mini</text>
+          <text x="822" y="257" text-anchor="middle" font-size="8" fill="#3a3a55" font-family="DM Sans,sans-serif">84 pts — alt</text>
+
+          <!-- gemini -->
+          <rect x="762" y="305" width="120" height="34" rx="8" fill="#1a1a28" stroke="#2a2a3d" stroke-width="1"/>
+          <text x="822" y="320" text-anchor="middle" font-size="9" fill="#5c5a78" font-family="DM Sans,sans-serif">gemini-2.0-flash</text>
+          <text x="822" y="332" text-anchor="middle" font-size="8" fill="#3a3a55" font-family="DM Sans,sans-serif">79 pts — alt</text>
+
+          <text x="822" y="134" text-anchor="middle" font-size="9" font-weight="600" fill="#5c5a78" font-family="DM Sans,sans-serif" letter-spacing="1">MODELS</text>
+
+          <!-- ── RESULT NODE ── -->
+          <ellipse cx="910" cy="250" rx="36" ry="40" fill="#13131c" stroke="rgba(124,106,248,.5)" stroke-width="1.5"/>
+          <ellipse cx="910" cy="250" rx="36" ry="40" fill="none" stroke="rgba(124,106,248,.15)" stroke-width="8"/>
+          <text x="910" y="246" text-anchor="middle" font-size="10" font-weight="700" fill="#a78bfa" font-family="Sora,sans-serif">Result</text>
+          <text x="910" y="258" text-anchor="middle" font-size="8" fill="#9390b0" font-family="DM Sans,sans-serif">2,140 tok</text>
+
+          <!-- chosen haiku → result -->
+          <path d="M 882 165 Q 920 165 930 212" fill="none" stroke="#4ade80" stroke-width="1.8" marker-end="url(#arr-g)"/>
+
+          <!-- Token saving callout -->
+          <rect x="840" y="395" width="100" height="44" rx="8" fill="#1a1a28" stroke="rgba(74,222,128,.3)" stroke-width="1"/>
+          <text x="890" y="413" text-anchor="middle" font-size="8" fill="#5c5a78" font-family="DM Sans,sans-serif">Token saving</text>
+          <text x="890" y="428" text-anchor="middle" font-size="14" font-weight="700" fill="#4ade80" font-family="Sora,sans-serif">↓ 82%</text>
+          <line x1="890" y1="395" x2="890" y2="292" stroke="#2a2a3d" stroke-width="1" stroke-dasharray="3,3"/>
+
+          <!-- Labels along spine -->
+          <text x="298" y="470" text-anchor="middle" font-size="8" fill="#2a2a3d" font-family="DM Sans,sans-serif">KNOWLEDGE GRAPH</text>
+          <text x="478" y="470" text-anchor="middle" font-size="8" fill="#2a2a3d" font-family="DM Sans,sans-serif">SLM ROUTING</text>
+          <text x="658" y="470" text-anchor="middle" font-size="8" fill="#2a2a3d" font-family="DM Sans,sans-serif">MODEL SELECT</text>
+          <text x="910" y="470" text-anchor="middle" font-size="8" fill="#2a2a3d" font-family="DM Sans,sans-serif">OUTPUT</text>
+        </svg>
+      </div>
+    </div>
+
+    <div class="sp24"></div>
+
+    <!-- Decision reasoning -->
+    <div class="sec">Decision reasoning</div>
+    <div class="card">
+      <div class="rc-stats">
+        <div class="rc-stat"><div class="rc-sv" style="color:var(--accent)">Low</div><div class="rc-sk">Task complexity</div></div>
+        <div class="rc-stat"><div class="rc-sv" style="color:var(--green)">94%</div><div class="rc-sk">SLM confidence</div></div>
+        <div class="rc-stat"><div class="rc-sv" style="color:var(--teal)">$0.002</div><div class="rc-sk">Est. cost</div></div>
+      </div>
+      <div class="rc-note">Low-complexity analytical query with high SLM domain match. claude-haiku-4 paired with inventory-analysis-v2 reduces tokens by <span style="color:var(--green);font-weight:600">82%</span> while maintaining equivalent output quality to GPT-4. Full LLM context is not required for this task.</div>
+    </div>
+
+    <div class="sp24"></div>
+    <div class="g2-np">
+      <button class="btn" onclick="go(2)">← Back</button>
+      <button class="btn btn-p" onclick="go(4)">Run &amp; view results →</button>
+    </div>
+    <div class="sp32"></div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════
+     PAGE 4 — RESULTS
+════════════════════════════════════════════════════ -->
+<div class="page" id="pg4">
+  <div class="ph">
+    <div class="inner">
+      <div class="ph-left">
+        <div class="ph-label">Step 4 of 4 · Complete</div>
+        <div class="ph-title">Results &amp; Intelligence Report</div>
+        <div class="ph-sub">Full process trace, session insights &amp; downloadable output</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="inner">
+    <div class="pyr">
+      <div class="pyr-tier" style="width:100px;background:rgba(167,139,250,.15);border:1.5px solid rgba(167,139,250,.5);color:#a78bfa;font-weight:600;font-size:12px">✓ Result</div>
+      <div class="pyr-tier" style="width:190px;background:var(--bg4);border:1px solid var(--border);color:var(--text3);font-size:12px">✓ Model select</div>
+      <div class="pyr-tier" style="width:280px;background:var(--bg4);border:1px solid var(--border);color:var(--text3);font-size:12px">✓ SLM engine</div>
+      <div class="pyr-tier" style="width:380px;background:var(--bg4);border:1px solid var(--border);color:var(--text3);font-size:12px">✓ Data + GraphRAG</div>
+    </div>
+
+    <div class="sec">Process trace</div>
+    <div class="tl-item">
+      <div class="tl-ic" style="background:var(--amberlt);border-color:var(--amberbdr)">
+        <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><rect x="2" y="1.5" width="11" height="12" rx="2" stroke="#fbbf24" stroke-width="1.3"/><path d="M4.5 5.5h6M4.5 8h4" stroke="#fbbf24" stroke-width="1" stroke-linecap="round"/></svg>
+      </div>
+      <div>
+        <div class="tl-t">5 sources injected · GraphRAG built</div>
+        <div class="tl-d">4 files + 1 DB source · 275 entities · 186 relations · knowledge graph indexed</div>
+        <span class="chip" style="background:var(--amberlt);color:var(--amber);border:1px solid var(--amberbdr)">Foundation</span>
+      </div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-ic" style="background:var(--corallt);border-color:var(--coralbdr)">
+        <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><circle cx="7.5" cy="7.5" r="5.5" stroke="#fb7185" stroke-width="1.3"/><path d="M10.5 4.5L4.5 10.5" stroke="#fb7185" stroke-width="1.2" stroke-linecap="round"/><circle cx="4.5" cy="4.5" r="1.2" fill="#fb7185"/><circle cx="10.5" cy="10.5" r="1.2" fill="#fb7185"/></svg>
+      </div>
+      <div>
+        <div class="tl-t">SLM matched — score 94 ≥ 80 threshold</div>
+        <div class="tl-d">Internal GPT scored 14 SLMs · inventory-analysis-v2 selected · updated with new context · reuse path activated</div>
+        <span class="chip" style="background:var(--corallt);color:var(--coral);border:1px solid var(--coralbdr)">SLM engine</span>
+      </div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-ic" style="background:var(--teallt);border-color:var(--tealbdr)">
+        <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><rect x="1.5" y="3" width="12" height="9" rx="2" stroke="#2dd4a0" stroke-width="1.3"/><path d="M5 3V2M10 3V2M1.5 6.5h12" stroke="#2dd4a0" stroke-width="1" stroke-linecap="round"/></svg>
+      </div>
+      <div>
+        <div class="tl-t">claude-haiku-4 selected — 98/100</div>
+        <div class="tl-d">Low complexity · SLM covers domain · $0.002 cost · 1.4s latency</div>
+        <span class="chip" style="background:var(--teallt);color:var(--teal);border:1px solid var(--tealbdr)">Model select</span>
+      </div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-ic" style="background:var(--greenlt);border-color:var(--greenbdr)">
+        <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M2.5 8L5.5 11 12.5 4" stroke="#4ade80" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div>
+        <div class="tl-t">Result generated — 2,140 tokens</div>
+        <div class="tl-d">vs 14,800 baseline · 85.5% reduction · $0.002 total cost</div>
+        <span class="chip" style="background:var(--greenlt);color:var(--green);border:1px solid var(--greenbdr)">↓ 85.5% tokens</span>
+      </div>
+    </div>
+
+    <div class="sp24"></div>
+    <div class="sec">Session insights</div>
+    <div class="g4">
+      <div class="mcard" style="--bar-color:var(--green)"><div class="mc-lbl">Tokens used</div><div class="mc-val">2,140</div><div class="mc-sub">vs 14,800 base</div><div class="mc-pill pill-g">↓ 85%</div></div>
+      <div class="mcard" style="--bar-color:var(--teal)"><div class="mc-lbl">Cost</div><div class="mc-val">$0.002</div><div class="mc-sub">vs $0.044 GPT-4</div><div class="mc-pill pill-g">95% cheaper</div></div>
+      <div class="mcard" style="--bar-color:var(--accent)"><div class="mc-lbl">SLM used</div><div class="mc-val">v2</div><div class="mc-sub">inventory model</div><div class="mc-pill pill-b">Reused</div></div>
+      <div class="mcard" style="--bar-color:var(--amber)"><div class="mc-lbl">Latency</div><div class="mc-val">1.4s</div><div class="mc-sub">end-to-end</div><div class="mc-pill pill-t">Fast</div></div>
+    </div>
+
+    <div class="sp24"></div>
+    <div class="sec">Output</div>
+    <div class="result-box">
+      <div class="result-text">
+        <span style="color:var(--text1);font-weight:600">Top 5 inventory items by revenue — Q3:</span><br><br>
+        1. <span style="color:var(--text1)">SKU-4412 · Industrial Bearings</span> — $284,000 (+12% QoQ) · Reorder: Normal<br>
+        2. <span style="color:var(--text1)">SKU-2210 · Hydraulic Seals</span> — $198,500 (+6%) · <span style="color:var(--amber)">⚠ Reorder anomaly: 3-day early trigger</span><br>
+        3. <span style="color:var(--text1)">SKU-3301 · Valve Assembly</span> — $176,200 (−2%) · Reorder: Normal<br>
+        4. <span style="color:var(--text1)">SKU-1188 · Pressure Gauges</span> — $142,800 (+19%) · <span style="color:var(--coral)">⚠ High velocity — stockout risk in 14 days</span><br>
+        5. <span style="color:var(--text1)">SKU-5521 · Filter Cartridges</span> — $128,400 (+3%) · Reorder: Normal<br><br>
+        <span style="color:var(--text1);font-weight:600">Anomalies flagged:</span> SKU-2210 triggers reorder 3 days early. SKU-1188 velocity increase may cause stockout — consider safety stock adjustment.
+      </div>
+      <div class="result-footer">
+        <span class="result-meta">claude-haiku-4 · inventory-analysis-v2 · 2,140 tokens · $0.002</span>
+        <button class="btn btn-p btn-sm" onclick="downloadResult()">↓ Download result</button>
+      </div>
+    </div>
+
+    <div class="sp24"></div>
+    <div class="g2-np">
+      <button class="btn" onclick="go(0)">← Dashboard</button>
+      <button class="btn btn-p" onclick="go(1)">New session →</button>
+    </div>
+    <div class="sp32"></div>
+  </div>
+</div>
+
+
+<script>
+function go(n) {
+  document.querySelectorAll('.page').forEach((p,i) => p.classList.toggle('on', i === n));
+  document.querySelectorAll('.sn').forEach((s,i) => {
+    s.classList.remove('active','done');
+    if (i === n) s.classList.add('active');
+    else if (i < n) s.classList.add('done');
+  });
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+function switchTab(t) {
+  document.getElementById('section-file').style.display = t==='file' ? 'block' : 'none';
+  document.getElementById('section-db').style.display   = t==='db'   ? 'block' : 'none';
+  document.getElementById('tab-file').style.cssText = t==='file' ? 'border-color:var(--accent);color:var(--accent);background:var(--accentdim)' : '';
+  document.getElementById('tab-db').style.cssText   = t==='db'   ? 'border-color:var(--accent);color:var(--accent);background:var(--accentdim)' : '';
+}
+
+function toggleDB(el) {
+  const body = document.getElementById('dbBody');
+  const chev = el.querySelector('.db-chevron');
+  body.classList.toggle('open');
+  chev.style.transform = body.classList.contains('open') ? 'rotate(180deg)' : '';
+  if (body.classList.contains('open')) {
+    body.style.display = 'block';
+  } else {
+    body.style.display = 'none';
+  }
+}
+document.getElementById('dbBody').style.display = 'none';
+
+function testConn() {
+  const s = document.getElementById('dbStatus');
+  s.textContent = 'Testing…'; s.className = 'db-status';
+  setTimeout(() => { s.textContent = '✓ Connection successful'; s.className = 'db-status ok'; }, 1400);
+}
+function connectDB() {
+  const s = document.getElementById('dbStatus');
+  s.textContent = 'Connecting…'; s.className = 'db-status';
+  setTimeout(() => {
+    s.textContent = '✓ Ingesting schema…'; s.className = 'db-status ok';
+    const chip = document.getElementById('chip-pg');
+    chip.classList.add('connected');
+    chip.querySelector('.db-chip-dot').style.background = 'var(--green)';
+  }, 1800);
+}
+
+let dc = 5;
+const ftypes = [
+  {t:'PDF',bg:'rgba(251,113,133,.12)',c:'#fb7185',bdr:'rgba(251,113,133,.3)'},
+  {t:'DOCX',bg:'rgba(167,139,250,.12)',c:'#a78bfa',bdr:'rgba(167,139,250,.3)'},
+  {t:'XLSX',bg:'rgba(45,212,160,.12)',c:'#2dd4a0',bdr:'rgba(45,212,160,.3)'},
+  {t:'CSV',bg:'rgba(251,191,36,.12)',c:'#fbbf24',bdr:'rgba(251,191,36,.3)'},
+  {t:'TXT',bg:'rgba(96,165,250,.12)',c:'#60a5fa',bdr:'rgba(96,165,250,.3)'}
+];
+const fnames = ['Contract_2026.pdf','Annual_Review.docx','Budget_Model.xlsx','Leads_Export.csv','Notes_Final.txt'];
+
+function addDoc() {
+  dc++;
+  const ft = ftypes[dc % ftypes.length];
+  const nm = fnames[dc % fnames.length];
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><div style="font-size:12px;font-weight:500;color:var(--text1)">${nm}</div><div style="font-size:10px;color:var(--text3);margin-top:2px">uploading…</div></td>
+    <td><span class="ft-badge" style="background:${ft.bg};color:${ft.c};border:1px solid ${ft.bdr}">${ft.t}</span></td>
+    <td><span class="sdot" style="background:#fbbf24;animation:pillpulse 1.2s infinite"></span><span style="font-size:11px;color:#fbbf24;font-weight:500">Uploading</span></td>
+    <td><div class="action-pills"><span class="apill active">Cleaning…</span><span class="apill">Label</span><span class="apill">Entity map</span><span class="apill">GraphRAG</span></div></td>`;
+  document.getElementById('docTbody').appendChild(tr);
+  setTimeout(() => {
+    tr.querySelectorAll('td')[2].innerHTML = '<span class="sdot" style="background:#4ade80"></span><span style="font-size:11px;color:#4ade80;font-weight:500">GraphRAG ready</span>';
+    tr.querySelectorAll('td')[3].innerHTML = '<div class="action-pills"><span class="apill done">Cleaned</span><span class="apill done">Labelled</span><span class="apill done">Entities mapped</span><span class="apill done">GraphRAG built</span></div>';
+    tr.querySelectorAll('td')[0].querySelector('div:last-child').textContent = `${(Math.random()*2+0.3).toFixed(1)} MB · ${Math.floor(Math.random()*80+30)} entities`;
+  }, 2400);
+}
+
+function runSLM(btn) {
+  btn.textContent = 'Scanning…'; btn.disabled = true;
+  const bar = document.getElementById('thinkBar');
+  const txt = document.getElementById('thinkText');
+  bar.style.cssText = 'display:flex;align-items:center;gap:10px;padding:13px 16px;background:var(--amberlt);border-radius:var(--radius-sm);font-size:11px;color:var(--amber);border:1px solid var(--amberbdr);transition:all .4s';
+  bar.querySelectorAll('.think-dot').forEach(d => d.style.background = '#fbbf24');
+  txt.textContent = 'Scanning 14 SLMs… match found: inventory-analysis-v2 (score 94 ≥ 80)';
+  setTimeout(() => {
+    bar.style.cssText = 'display:flex;align-items:center;gap:10px;padding:13px 16px;background:var(--greenlt);border-radius:var(--radius-sm);font-size:11px;color:var(--green);border:1px solid var(--greenbdr);transition:all .4s';
+    bar.querySelectorAll('.think-dot').forEach(d => { d.style.background='#4ade80'; d.style.animation='none'; });
+    txt.textContent = '✓ Route decided: Reuse path — inventory-analysis-v2 updated with latest GraphRAG. Token saving: 82%';
+    btn.textContent = '✓ Analysed';
+    btn.style.background = '#4ade80'; btn.style.borderColor = '#4ade80'; btn.style.color = '#0e0e14';
+  }, 1800);
+}
+
+function downloadResult() {
+  const data = { session:'inventory-q3-analysis', model:'claude-haiku-4', slm:'inventory-analysis-v2', tokens_used:2140, tokens_saved:12660, cost_usd:0.002, slm_score:94, route:'reuse', result:[{sku:'SKU-4412',name:'Industrial Bearings',revenue:284000,change:'+12%',anomaly:false},{sku:'SKU-2210',name:'Hydraulic Seals',revenue:198500,change:'+6%',anomaly:true,note:'Early reorder trigger +3 days'},{sku:'SKU-3301',name:'Valve Assembly',revenue:176200,change:'-2%',anomaly:false},{sku:'SKU-1188',name:'Pressure Gauges',revenue:142800,change:'+19%',anomaly:true,note:'Stockout risk 14 days'},{sku:'SKU-5521',name:'Filter Cartridges',revenue:128400,change:'+3%',anomaly:false}] };
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'neuropilot-result.json'; a.click();
+}
+
+go(1);
+</script>
+</body>
+</html>
