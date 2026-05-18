@@ -1,0 +1,1 @@
+{"fk_detection": {"detected_explicit_fks": 1, "actual_fk_constraints": 1, "fk_detection_rate": 1.0}, "semantic_confidence": {"mean_confidence": 0.62, "column_count": 8}, "graphify_quality": {"EXTRACTED": 9, "INFERRED": 1, "AMBIGUOUS": 0}}

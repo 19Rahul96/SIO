@@ -1,0 +1,23 @@
+CREATE TABLE products (
+	product_id INTEGER, 
+	brand_id INTEGER, 
+	category_id INTEGER, 
+	product_name TEXT, 
+	flavor TEXT, 
+	launch_year INTEGER, 
+	carbonation_level REAL, 
+	sugar_g REAL, 
+	caffeine_mg REAL, 
+	calories INTEGER, 
+	sweetener_type TEXT, 
+	ingredients TEXT, 
+	preservatives TEXT, 
+	vegan_friendly INTEGER, 
+	organic_certified INTEGER, 
+	package_size_ml INTEGER, 
+	shelf_life_days INTEGER, 
+	created_at TEXT, 
+	PRIMARY KEY (product_id), 
+	FOREIGN KEY(brand_id) REFERENCES brands (brand_id), 
+	FOREIGN KEY(category_id) REFERENCES categories (category_id)
+);
