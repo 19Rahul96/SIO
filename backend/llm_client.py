@@ -10,6 +10,13 @@ ANTHROPIC_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 OPENAI_KEY = os.getenv("OPENAI_API_KEY", "")
 GEMINI_KEY = os.getenv("GEMINI_API_KEY", "")
 GROQ_KEY = os.getenv("GROQ_API_KEY", "")
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3:8b")
+OLLAMA_FALLBACK_MODELS = [
+    m.strip()
+    for m in os.getenv("OLLAMA_FALLBACK_MODELS", "llama3:8b,qwen2.5:7b,phi3:mini").split(",")
+    if m.strip()
+]
 
 _MODEL_MAP = {
     "claude-haiku-4-5": "claude-haiku-4-5-20251001",
@@ -20,18 +27,25 @@ _MODEL_MAP = {
 
 
 def _provider_for_model(model: str) -> str:
+    if model.startswith("ollama/"):
+        return "ollama"
     if model.startswith("claude"):
         return "anthropic"
     if model.startswith("gpt"):
         return "openai"
     if model.startswith("gemini"):
         return "gemini"
+    if ":" in model and not model.startswith("http"):
+        # Treat local model names like llama3:8b or qwen2.5:7b as Ollama targets.
+        return "ollama"
     return "unknown"
 
 
 def _available_provider_model(preferred_model: str) -> str | None:
     provider = _provider_for_model(preferred_model)
 
+    if provider == "ollama":
+        return preferred_model
     if provider == "anthropic" and ANTHROPIC_KEY:
         return preferred_model
     if provider == "openai" and OPENAI_KEY:
@@ -39,6 +53,8 @@ def _available_provider_model(preferred_model: str) -> str | None:
     if provider == "gemini" and GEMINI_KEY:
         return preferred_model
 
+    if OLLAMA_URL:
+        return f"ollama/{OLLAMA_MODEL}"
     if OPENAI_KEY:
         return "gpt-4o-mini"
     if ANTHROPIC_KEY:
@@ -81,6 +97,12 @@ async def call_llm(
     provider = _provider_for_model(chosen_model)
     fallback_reason = None
 
+    if provider == "ollama":
+        try:
+            return await _ollama(system, user_msg, chosen_model)
+        except Exception as e:
+            logger.warning("Ollama call failed, falling back: %s", e)
+            fallback_reason = f"Ollama request failed: {e}"
     if provider == "anthropic" and ANTHROPIC_KEY:
         try:
             return await _anthropic(system, user_msg, chosen_model)
@@ -115,7 +137,22 @@ async def call_llm(
         except Exception as e:
             logger.warning("Groq call failed, falling back: %s", e)
             fallback_reason = f"Groq request failed: {e}"
+    if OLLAMA_URL:
+        for model_name in [OLLAMA_MODEL] + [m for m in OLLAMA_FALLBACK_MODELS if m != OLLAMA_MODEL]:
+            try:
+                return await _ollama(system, user_msg, f"ollama/{model_name}")
+            except Exception as e:
+                logger.warning("Ollama fallback model '%s' failed: %s", model_name, e)
+                fallback_reason = f"Ollama fallback failed: {e}"
     return _mock(prompt, context, fallback_reason)
+
+
+def _normalize_ollama_model(model: str) -> str:
+    if model.startswith("ollama/"):
+        return model.split("/", 1)[1]
+    if _provider_for_model(model) == "ollama":
+        return model
+    return OLLAMA_MODEL
 
 
 async def _anthropic(system: str, message: str, model: str) -> str:
@@ -157,6 +194,33 @@ async def _gemini(system: str, message: str, model: str = "gemini-2.0-flash") ->
         resp.raise_for_status()
         data = resp.json()
     return data["candidates"][0]["content"]["parts"][0]["text"]
+
+
+async def _ollama(system: str, message: str, model: str) -> str:
+    import httpx
+
+    model_name = _normalize_ollama_model(model)
+    payload = {
+        "model": model_name,
+        "prompt": f"{system}\n\n{message}",
+        "stream": False,
+        "options": {
+            "temperature": 0.1,
+            "num_predict": 1024,
+        },
+    }
+    async with httpx.AsyncClient(timeout=45) as client:
+        resp = await client.post(f"{OLLAMA_URL.rstrip('/')}/api/generate", json=payload)
+        resp.raise_for_status()
+        data = resp.json()
+
+    if data.get("error"):
+        raise RuntimeError(str(data.get("error")))
+
+    text = str(data.get("response", "")).strip()
+    if not text:
+        raise RuntimeError("Ollama returned empty response")
+    return text
 
 
 async def _groq(system: str, message: str, model: str = "llama-3.1-8b-instant") -> str:

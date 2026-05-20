@@ -18,6 +18,19 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 logger = logging.getLogger(__name__)
 
 from decision import DecisionEngine
+from cross_source_linker import (
+    apply_cross_link_review,
+    cross_link_metrics,
+    get_cross_links,
+    list_cross_link_reviews,
+)
+from data_dictionary import (
+    dictionary_metrics,
+    get_entry,
+    list_column_entries,
+    list_table_entries,
+    review_entry,
+)
 from db_processing import (
     db_pipeline,
     get_db_accuracy,
@@ -110,6 +123,12 @@ class ScrapeRequest(BaseModel):
 class ReviewDecisionRequest(BaseModel):
     decision: str
     decided_by: Optional[str] = None
+
+
+class DictionaryReviewRequest(BaseModel):
+    decision: str
+    decided_by: Optional[str] = None
+    notes: Optional[str] = None
 
 
 class SuppressRelationRequest(BaseModel):
@@ -650,6 +669,48 @@ async def db_accuracy(db_id: str):
     return accuracy
 
 
+@app.get("/dictionary/tables")
+async def dictionary_tables(
+    q: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    limit: int = Query(200, ge=1, le=1000),
+):
+    return list_table_entries(query=q, status=status, limit=limit)
+
+
+@app.get("/dictionary/columns")
+async def dictionary_columns(
+    q: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    table_key: Optional[str] = Query(None),
+    limit: int = Query(500, ge=1, le=2000),
+):
+    return list_column_entries(query=q, status=status, table_key=table_key, limit=limit)
+
+
+@app.get("/dictionary/entry/{entry_id}")
+async def dictionary_entry(entry_id: str):
+    entry = get_entry(entry_id)
+    if not entry:
+        raise HTTPException(404, "Dictionary entry not found")
+    return entry
+
+
+@app.post("/dictionary/review/{entry_id}")
+async def dictionary_review(entry_id: str, req: DictionaryReviewRequest):
+    result = review_entry(entry_id=entry_id, decision=req.decision, decided_by=req.decided_by, notes=req.notes)
+    if not result.get("ok"):
+        err = result.get("error", "review_update_failed")
+        code = 404 if err == "entry_not_found" else 400
+        raise HTTPException(code, err)
+    return result
+
+
+@app.get("/dictionary/metrics")
+async def dictionary_quality_metrics():
+    return dictionary_metrics()
+
+
 @app.post("/db/query")
 async def db_query(req: DBQueryRequest):
     merged_file_ids = list(req.file_ids or [])
@@ -932,6 +993,37 @@ async def wiki_review_decision(review_id: str, req: ReviewDecisionRequest):
     return result
 
 
+@app.get("/links/cross-source/{source_id}")
+async def cross_source_links(source_id: str):
+    payload = get_cross_links(source_id)
+    if not payload:
+        raise HTTPException(404, "Cross-source links not found")
+    return payload
+
+
+@app.get("/links/reviews")
+async def cross_source_reviews(
+    status: str = Query("pending"),
+    limit: int = Query(100, ge=1, le=500),
+):
+    return list_cross_link_reviews(status=status, limit=limit)
+
+
+@app.post("/links/review/{review_id}")
+async def cross_source_review_decision(review_id: str, req: ReviewDecisionRequest):
+    result = apply_cross_link_review(review_id, req.decision, req.decided_by)
+    if not result.get("ok"):
+        err = result.get("error", "review_update_failed")
+        code = 404 if err == "review_not_found" else 400
+        raise HTTPException(code, err)
+    return result
+
+
+@app.get("/links/metrics")
+async def links_metrics():
+    return cross_link_metrics()
+
+
 @app.get("/quality/metrics")
 async def quality_metrics():
     all_files = get_all_statuses()
@@ -955,6 +1047,8 @@ async def quality_metrics():
 
     graph_metrics = graph_builder.canonical_graph_metrics()
     registry = registry_metrics()
+    dictionary = dictionary_metrics()
+    links = cross_link_metrics()
 
     return {
         "ingestion": {
@@ -967,12 +1061,14 @@ async def quality_metrics():
         },
         "canonical_registry": registry,
         "canonical_graph": graph_metrics,
+        "data_dictionary": dictionary,
         "wiki": {
             "page_count": page_count,
             "facts_with_citations": cited_fact_total,
             "total_facts": fact_total,
             "citation_coverage_pct": round((cited_fact_total / max(1, fact_total)) * 100, 2),
         },
+        "cross_links": links,
         "updated_at": time.time(),
     }
 

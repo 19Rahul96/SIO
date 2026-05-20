@@ -10,3 +10,9 @@ __pycache__/
 backend/venv/
 backend/venv_linux/
 backend/.venv/
+
+backend/data/files/
+backend/data/processed/ 
+backend/data/wiki_pages/
+backend/data/graphs/
+

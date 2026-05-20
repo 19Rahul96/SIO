@@ -2,6 +2,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import time
 from typing import Any, Dict, List, Tuple
 
@@ -18,10 +19,22 @@ _EDGE_CONFIDENCE = {
 
 
 def install_graphify() -> str:
-    """Ensure Graphify CLI is available and return its executable path."""
+    """Ensure Graphify invocation is available and return executable command."""
     cli_path = shutil.which("graphify")
-    if not cli_path:
-        raise RuntimeError("Graphify CLI not found on PATH. Install graphifyy[sql] in backend venv.")
+    if cli_path:
+        return cli_path
+
+    # PATH can miss venv scripts in background jobs; module entrypoint is equivalent.
+    module_probe = subprocess.run(
+        [sys.executable, "-m", "graphify", "--help"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if module_probe.returncode == 0:
+        return f"{sys.executable} -m graphify"
+
+    raise RuntimeError("Graphify CLI not found on PATH. Install graphifyy[sql] in backend venv.")
     return cli_path
 
 
@@ -29,7 +42,10 @@ def run_graphify_extract(schema_dir: str, output_dir: str, backend: str = "claud
     cli = install_graphify()
     os.makedirs(output_dir, exist_ok=True)
 
-    cmd = [cli, "extract", schema_dir, "--backend", backend]
+    if " -m graphify" in cli:
+        cmd = [sys.executable, "-m", "graphify", "extract", schema_dir, "--backend", backend]
+    else:
+        cmd = [cli, "extract", schema_dir, "--backend", backend]
     proc = subprocess.run(
         cmd,
         cwd=output_dir,

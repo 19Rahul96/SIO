@@ -7,6 +7,8 @@ from json import JSONDecodeError
 from typing import Any, Dict, List
 
 from db_connector import connect_db, export_schema_as_corpus_text, export_schema_as_ddl, get_schema_metadata
+from cross_source_linker import build_db_semantic_hints, link_cross_source
+from data_dictionary import upsert_from_profile
 from db_graphify import map_graphify_to_canonical, merge_into_canonical, parse_graphify_graph, run_graphify_extract
 from db_profiler import compute_accuracy_metrics, detect_implicit_relationships, profile_database
 from processing import chunk_text
@@ -183,7 +185,6 @@ def _write_status(db_id: str, updates: Dict[str, Any]):
 
 
 def init_db_status(db_id: str, engine: str, dbname: str = ""):
-    source_sql_dir = _default_carbonated_sql_dir() if engine == "sqlite" else None
     _write_status(
         db_id,
         {
@@ -194,7 +195,7 @@ def init_db_status(db_id: str, engine: str, dbname: str = ""):
             "size": 0,
             "engine": engine,
             "database": dbname,
-            "source_sql_dir": source_sql_dir,
+            "source_sql_dir": None,
             "status": "queued",
             "status_message": "DB job queued and waiting to start",
             "error": None,
@@ -267,9 +268,6 @@ def db_pipeline(db_id: str, conn_params: Dict[str, Any], embedding_store):
         )
 
         source_sql_dir = conn_params.get("source_sql_dir")
-        engine = str(conn_params.get("engine") or "").lower()
-        if engine == "sqlite" and not source_sql_dir:
-            source_sql_dir = _default_carbonated_sql_dir()
 
         if source_sql_dir:
             resolved_source = _resolve_backend_path(source_sql_dir)
@@ -355,6 +353,8 @@ def db_pipeline(db_id: str, conn_params: Dict[str, Any], embedding_store):
         profile = profile_database(metadata, db_engine, progress_cb=_profile_progress)
         implicit_relationships = detect_implicit_relationships(metadata)
         profile["implicit_relationships"] = implicit_relationships
+        dictionary_report = upsert_from_profile(db_id=db_id, profile=profile)
+        profile["dictionary_report"] = dictionary_report
         _write_json(_profile_path(db_id), profile)
 
         schema_dir = f"{DB_SCHEMA_ROOT}/{db_id}"
@@ -388,6 +388,28 @@ def db_pipeline(db_id: str, conn_params: Dict[str, Any], embedding_store):
             },
         )
         mapped = map_graphify_to_canonical(graphify_graph, db_id)
+        cross_link_result = {
+            "source_id": db_id,
+            "accepted_edges": [],
+            "report": {
+                "accepted_count": 0,
+                "review_count": 0,
+                "rejected_count": 0,
+                "linked_source_coverage_pct": 0.0,
+            },
+        }
+        try:
+            db_semantic_hints = build_db_semantic_hints(profile, mapped.get("resolved_nodes", []))
+            cross_link_result = link_cross_source(
+                source_id=db_id,
+                source_type="db",
+                source_nodes=mapped.get("resolved_nodes", []),
+                embed_fn=embedding_store.embed_text,
+                source_semantic_hints=db_semantic_hints,
+            )
+            mapped["resolved_edges"] = mapped.get("resolved_edges", []) + cross_link_result.get("accepted_edges", [])
+        except Exception as ex:
+            logger.warning("Cross-source linking failed for %s: %s", db_id, ex)
         merge_report = merge_into_canonical(db_id, mapped)
 
         _write_status(
@@ -414,7 +436,9 @@ def db_pipeline(db_id: str, conn_params: Dict[str, Any], embedding_store):
                 "used_fallback_graph": used_fallback_graph,
             },
             "merge_report": merge_report,
+            "cross_link_report": cross_link_result.get("report", {}),
             "accuracy": accuracy,
+            "dictionary_report": dictionary_report,
             "implicit_relationship_count": len(implicit_relationships),
             "completed_at": time.time(),
         }
@@ -430,6 +454,8 @@ def db_pipeline(db_id: str, conn_params: Dict[str, Any], embedding_store):
                 "profiled_tables": len(profile.get("tables", [])),
                 "graphify_ok": bool(graphify_run.get("ok")),
                 "semantic_inference": profile.get("semantic_inference", {}),
+                "dictionary_report": dictionary_report,
+                "cross_link_report": cross_link_result.get("report", {}),
                 "status_message": "DB ingestion pipeline completed",
                 "pipeline_steps": {
                     "connecting": True,

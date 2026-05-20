@@ -3,9 +3,12 @@ import os
 import re
 import time
 import logging
+import threading
+from contextlib import contextmanager
 from typing import List, Dict, Optional
 
 from ingestion import extract_corpus
+from cross_source_linker import link_cross_source
 from entity_extraction import extract_entities_from_chunks
 from entity_resolution import resolve_canonical_graph
 from graph_builder import GraphBuilder
@@ -130,10 +133,36 @@ def _write_status(file_id: str, updates: Dict):
         with open(path) as f:
             data = json.load(f)
         data.update(updates)
+        data["updated_at"] = time.time()
+        if "started_at" not in data and data.get("status") not in {"uploaded", "failed", "completed"}:
+            data["started_at"] = data["updated_at"]
         with open(path, "w") as f:
             json.dump(data, f)
     except Exception as e:
         logger.error(f"Status write failed for {file_id}: {e}")
+
+
+@contextmanager
+def _status_heartbeat(file_id: str, status: str, status_message: str, interval_seconds: float = 15.0):
+    stop_event = threading.Event()
+
+    def _beat() -> None:
+        while not stop_event.wait(interval_seconds):
+            _write_status(
+                file_id,
+                {
+                    "status": status,
+                    "status_message": status_message,
+                },
+            )
+
+    thread = threading.Thread(target=_beat, daemon=True)
+    thread.start()
+    try:
+        yield
+    finally:
+        stop_event.set()
+        thread.join(timeout=max(1.0, interval_seconds))
 
 
 def get_file_status(file_id: str) -> Optional[Dict]:
@@ -222,25 +251,59 @@ def process_file_pipeline(file_id: str, file_path: str, ext: str, embedding_stor
         time.sleep(0.3)
 
         # 4. Entity extraction
+        _write_status(file_id, {
+            "status": "entities_extracted",
+            "error": None,
+            "status_message": "Extracting entities and resolving canonical graph",
+            "pipeline_steps": {
+                "cleaned": True, "chunked": True,
+                "entities_extracted": False, "graph_built": False, "indexed": False,
+            },
+        })
         # 4. Per-chunk entity extraction — every entity/relationship carries chunk_idx
-        entities, relationships = extract_entities_from_chunks(chunks)
+        with _status_heartbeat(
+            file_id,
+            status="entities_extracted",
+            status_message="Extracting entities and resolving canonical graph",
+        ):
+            entities, relationships = extract_entities_from_chunks(chunks)
 
-        canonical_nodes, mention_to_canonical = build_canonical_nodes(file_id, entities)
-        canonical_edges = build_canonical_edges(file_id, relationships, mention_to_canonical)
-        schema_validation = validate_canonical_graph(canonical_nodes, canonical_edges)
-        resolution_result = resolve_canonical_graph(
-            file_id=file_id,
-            nodes=canonical_nodes,
-            edges=canonical_edges,
-            embed_fn=embedding_store.embed_text,
-        )
-        resolution_report = resolution_result.get("resolution_report", {})
-        resolved_nodes = resolution_result.get("resolved_nodes", [])
-        resolved_edges = resolution_result.get("resolved_edges", [])
-        canonical_upsert = _graph_builder.upsert_canonical_graph(file_id, resolved_nodes, resolved_edges)
-        touched_canonical_ids = sorted({n.get("canonical_id") for n in resolved_nodes if n.get("canonical_id")})
-        canonical_graph = _graph_builder.get_canonical_graph()
-        wiki_page_report = _wiki_builder.build_pages_for_nodes(file_id, touched_canonical_ids, canonical_graph)
+            canonical_nodes, mention_to_canonical = build_canonical_nodes(file_id, entities)
+            canonical_edges = build_canonical_edges(file_id, relationships, mention_to_canonical)
+            schema_validation = validate_canonical_graph(canonical_nodes, canonical_edges)
+            resolution_result = resolve_canonical_graph(
+                file_id=file_id,
+                nodes=canonical_nodes,
+                edges=canonical_edges,
+                embed_fn=embedding_store.embed_text,
+            )
+            resolution_report = resolution_result.get("resolution_report", {})
+            resolved_nodes = resolution_result.get("resolved_nodes", [])
+            resolved_edges = resolution_result.get("resolved_edges", [])
+            cross_link_result = {
+                "source_id": file_id,
+                "accepted_edges": [],
+                "report": {
+                    "accepted_count": 0,
+                    "review_count": 0,
+                    "rejected_count": 0,
+                    "linked_source_coverage_pct": 0.0,
+                },
+            }
+            try:
+                cross_link_result = link_cross_source(
+                    source_id=file_id,
+                    source_type="corpus",
+                    source_nodes=resolved_nodes,
+                    embed_fn=embedding_store.embed_text,
+                )
+                resolved_edges = resolved_edges + cross_link_result.get("accepted_edges", [])
+            except Exception as ex:
+                logger.warning("Cross-source linking failed for %s: %s", file_id, ex)
+            canonical_upsert = _graph_builder.upsert_canonical_graph(file_id, resolved_nodes, resolved_edges)
+            touched_canonical_ids = sorted({n.get("canonical_id") for n in resolved_nodes if n.get("canonical_id")})
+            canonical_graph = _graph_builder.get_canonical_graph()
+            wiki_page_report = _wiki_builder.build_pages_for_nodes(file_id, touched_canonical_ids, canonical_graph)
 
         with open(f"{PROCESSED_DIR}/{file_id}_canonical.json", "w") as f:
             json.dump(
@@ -252,6 +315,7 @@ def process_file_pipeline(file_id: str, file_path: str, ext: str, embedding_stor
                     "resolved_edges": resolved_edges,
                     "schema_validation": schema_validation,
                     "resolution_report": resolution_report,
+                    "cross_link_report": cross_link_result.get("report", {}),
                     "canonical_upsert": canonical_upsert,
                     "wiki_page_report": wiki_page_report,
                 },
@@ -273,6 +337,7 @@ def process_file_pipeline(file_id: str, file_path: str, ext: str, embedding_stor
                 "pending_review_count": resolution_report.get("pending_review_count", 0),
                 "registry_total_nodes": resolution_report.get("registry_total_nodes", 0),
             },
+            "cross_link_report": cross_link_result.get("report", {}),
             "canonical_upsert": canonical_upsert,
             "wiki_page_report": {
                 "pages_created": wiki_page_report.get("pages_created", 0),
@@ -302,12 +367,18 @@ def process_file_pipeline(file_id: str, file_path: str, ext: str, embedding_stor
         _write_status(file_id, {
             "status": "indexing",
             "error": None,
+            "status_message": "Building embeddings and updating retrieval index",
             "pipeline_steps": {
                 "cleaned": True, "chunked": True,
                 "entities_extracted": True, "graph_built": True, "indexed": False,
             },
         })
-        embedding_store.add_chunks(file_id, chunks)
+        with _status_heartbeat(
+            file_id,
+            status="indexing",
+            status_message="Building embeddings and updating retrieval index",
+        ):
+            embedding_store.add_chunks(file_id, chunks)
 
         # 7. Save processed preview
         with open(f"{PROCESSED_DIR}/{file_id}_data.json", "w") as f:
@@ -326,6 +397,7 @@ def process_file_pipeline(file_id: str, file_path: str, ext: str, embedding_stor
                 "canonical_relations_count": len(canonical_edges),
                 "schema_validation": schema_validation,
                 "resolution_report": resolution_report,
+                "cross_link_report": cross_link_result.get("report", {}),
                 "canonical_upsert": canonical_upsert,
                 "wiki_page_report": wiki_page_report,
             }, f)
@@ -343,6 +415,7 @@ def process_file_pipeline(file_id: str, file_path: str, ext: str, embedding_stor
                 "pending_review_count": resolution_report.get("pending_review_count", 0),
                 "registry_total_nodes": resolution_report.get("registry_total_nodes", 0),
             },
+            "cross_link_report": cross_link_result.get("report", {}),
             "canonical_upsert": canonical_upsert,
             "wiki_page_report": {
                 "pages_created": wiki_page_report.get("pages_created", 0),
