@@ -462,6 +462,7 @@ def compute_accuracy_metrics(
     metadata: Dict[str, Any],
     profiled: Dict[str, Any],
     graphify_graph: Dict[str, Any],
+    eda_artifact: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     actual_fk = 0
     for t in metadata.get("tables", []):
@@ -485,6 +486,40 @@ def compute_accuracy_metrics(
         if etype in edge_quality:
             edge_quality[etype] += 1
 
+    confidence_bands = {"low": 0, "medium": 0, "high": 0}
+    for table in profiled.get("tables", []):
+        for col in table.get("columns", []):
+            conf = float(col.get("semantic_confidence", 0.0) or 0.0)
+            if conf < 0.5:
+                confidence_bands["low"] += 1
+            elif conf < 0.75:
+                confidence_bands["medium"] += 1
+            else:
+                confidence_bands["high"] += 1
+
+    rel_evidence = (eda_artifact or {}).get("relationship_evidence", {})
+    rel_count = len(rel_evidence)
+    strong_evidence = 0
+    weak_evidence = 0
+    for payload in rel_evidence.values():
+        overlap = float((payload or {}).get("overlap_pct", 0.0) or 0.0)
+        if overlap >= 0.7:
+            strong_evidence += 1
+        elif overlap < 0.35:
+            weak_evidence += 1
+
+    inferred_edges = edge_quality.get("INFERRED", 0)
+    ambiguous_edges = edge_quality.get("AMBIGUOUS", 0)
+    extracted_edges = edge_quality.get("EXTRACTED", 0)
+    total_modeled_edges = inferred_edges + ambiguous_edges + extracted_edges
+
+    high_risk_edge_ratio = (ambiguous_edges + weak_evidence) / max(1, total_modeled_edges)
+    contradiction_ratio = weak_evidence / max(1, rel_count)
+
+    calibration_proxy_error = abs(confidence_bands["high"] - strong_evidence) / max(
+        1, confidence_bands["high"] + strong_evidence
+    )
+
     return {
         "fk_detection": {
             "detected_explicit_fks": detected_explicit_fk,
@@ -500,4 +535,23 @@ def compute_accuracy_metrics(
             "table_count": len(table_semantic_scores),
         },
         "graphify_quality": edge_quality,
+        "relationship_effectiveness": {
+            "evidence_count": rel_count,
+            "strong_evidence_count": strong_evidence,
+            "weak_evidence_count": weak_evidence,
+            "evidence_success_rate": round(strong_evidence / max(1, rel_count), 4),
+        },
+        "confidence_analysis": {
+            "confidence_bands": confidence_bands,
+            "calibration_proxy_error": round(calibration_proxy_error, 4),
+        },
+        "graph_trust": {
+            "high_risk_edge_ratio": round(high_risk_edge_ratio, 4),
+            "contradiction_ratio": round(contradiction_ratio, 4),
+            "edge_confidence_distribution": {
+                "extracted": extracted_edges,
+                "inferred": inferred_edges,
+                "ambiguous": ambiguous_edges,
+            },
+        },
     }

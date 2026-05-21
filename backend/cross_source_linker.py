@@ -7,6 +7,11 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 import numpy as np
 
+# ML metrics contract import
+from metrics import RunMetrics
+import time
+import json
+
 from graph_builder import GraphBuilder
 
 PROCESSED_DIR = "data/processed"
@@ -91,6 +96,27 @@ def _write_json(path: str, payload: Dict[str, Any]) -> None:
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(payload, f)
+
+    # ---- ML Metrics Artifact (observe-only, stub) ----
+    try:
+        metrics_artifact = RunMetrics(
+            run_id=f"cross_link_{int(time.time()*1000)}",
+            stage="cross_source_link_decision",
+            timestamp=str(time.time()),
+            classification=None,
+            retrieval=None,
+            calibration=None,
+            hallucination=None,
+            extra={
+                "json_path": path,
+                "payload_keys": list(payload.keys()),
+            },
+            version="1.0",
+        )
+        with open(f"data/processed/crosslink_metrics_{int(time.time()*1000)}.json", "w") as f:
+            f.write(metrics_artifact.json(indent=2))
+    except Exception as e:
+        pass
 
 
 def _node_semantic_labels(node: Dict[str, Any], semantic_hints: Optional[Dict[str, List[str]]]) -> Set[str]:
@@ -178,6 +204,30 @@ def _cross_link_artifact_path(source_id: str) -> str:
     return f"{PROCESSED_DIR}/{source_id}_cross_links.json"
 
 
+def _eda_evidence_boost(
+    source_node: Dict[str, Any],
+    relationship_evidence: Optional[Dict[str, Any]],
+) -> float:
+    if not relationship_evidence:
+        return 0.0
+    label = _normalize(str(source_node.get("label") or ""))
+    if not label:
+        return 0.0
+
+    # Match by source-side table/column mention in evidence keys: table.col->table.col
+    matched: List[float] = []
+    for key, payload in relationship_evidence.items():
+        if label not in _normalize(str(key)):
+            continue
+        overlap = float((payload or {}).get("overlap_pct", 0.0) or 0.0)
+        matched.append(_clamp01(overlap))
+
+    if not matched:
+        return 0.0
+    # Bounded confidence boost, capped to avoid overriding semantic/embedding gates.
+    return min(0.08, (sum(matched) / len(matched)) * 0.08)
+
+
 def _load_reviews() -> Dict[str, Any]:
     return _read_json(REVIEWS_PATH, {"reviews": [], "updated_at": None})
 
@@ -254,6 +304,7 @@ def link_cross_source(
     source_nodes: List[Dict[str, Any]],
     embed_fn: Callable[[str], np.ndarray],
     source_semantic_hints: Optional[Dict[str, List[str]]] = None,
+    relationship_evidence: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     source_type_norm = (source_type or "").strip().lower()
     if source_type_norm not in {"db", "corpus"}:
@@ -325,7 +376,9 @@ def link_cross_source(
                 )
                 continue
 
-            final_score = _clamp01((0.45 * lexical) + (0.20 * semantic_score) + (0.35 * embedding))
+            base_score = _clamp01((0.45 * lexical) + (0.20 * semantic_score) + (0.35 * embedding))
+            eda_boost = _eda_evidence_boost(source_node, relationship_evidence)
+            final_score = _clamp01(base_score + eda_boost)
             relation = "cross_source_related"
             edge_key = _edge_key(source_cid, relation, target_cid)
 
@@ -347,6 +400,8 @@ def link_cross_source(
                     "lexical": round(lexical, 4),
                     "semantic": round(semantic_score, 4),
                     "embedding": round(embedding, 4),
+                    "eda_boost": round(eda_boost, 4),
+                    "base_score": round(base_score, 4),
                     "lexical_details": lexical_breakdown,
                     "semantic_details": semantic_breakdown,
                 },
@@ -400,6 +455,7 @@ def link_cross_source(
             "embedding_gate_threshold": EMBEDDING_GATE_THRESHOLD,
             "accept_threshold": ACCEPT_THRESHOLD,
             "review_threshold": REVIEW_THRESHOLD,
+            "eda_boost_max": 0.08,
         },
         "accepted": accepted,
         "review": review_candidates,

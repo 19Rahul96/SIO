@@ -53,6 +53,7 @@ export default function ResultsPage() {
     wikiPages, setWikiPages, selectedWikiPage, setSelectedWikiPage,
     wikiReviews, setWikiReviews, wikiLoading, setWikiLoading,
     wikiReviewUpdating, setWikiReviewUpdating,
+    qualityMetrics, setQualityMetrics,
   } = useStore()
   const [error, setError] = useState(null)
   const [wikiSearch, setWikiSearch] = useState('')
@@ -94,6 +95,7 @@ export default function ResultsPage() {
 
   useEffect(() => {
     refreshWiki('')
+    api.getQualityMetrics().then(setQualityMetrics).catch(() => {})
   }, [])
 
   const selectWikiPage = async (canonicalId) => {
@@ -124,6 +126,8 @@ export default function ResultsPage() {
   const result = finalRunResult
   const insights = result?.session_insights
   const trace = result?.trace
+  const trust = qualityMetrics?.trust || {}
+  const eda = qualityMetrics?.eda || {}
 
   const downloadResult = () => {
     const data = {
@@ -261,6 +265,40 @@ export default function ResultsPage() {
             </div>
           </>
         )}
+
+        <div className="mt-6">
+          <div className="sect">Reliability and relationship confidence</div>
+          <div className="grid grid-cols-4 gap-3.5 mb-6">
+            <div className="mcard" style={{ '--bar-color': '#0d9488' }}>
+              <div className="absolute top-0 left-0 right-0 h-0.5 rounded-t bg-teal" />
+              <div className="text-[10px] text-t3 font-semibold uppercase tracking-widest mb-2">EDA evidence</div>
+              <div className="font-sora text-[26px] font-bold text-t1 leading-none">{eda.relationship_evidence_count ?? 0}</div>
+              <div className="text-[11px] text-t2 mt-1">relationship evidence rows</div>
+              <div className="pill-b mt-2">EDA-backed</div>
+            </div>
+            <div className="mcard" style={{ '--bar-color': '#2563eb' }}>
+              <div className="absolute top-0 left-0 right-0 h-0.5 rounded-t bg-blue" />
+              <div className="text-[10px] text-t3 font-semibold uppercase tracking-widest mb-2">High-risk edges</div>
+              <div className="font-sora text-[26px] font-bold text-t1 leading-none">{((trust.high_risk_edge_ratio ?? 0) * 100).toFixed(1)}%</div>
+              <div className="text-[11px] text-t2 mt-1">low confidence edge share</div>
+              <div className="pill-t mt-2">Trust</div>
+            </div>
+            <div className="mcard" style={{ '--bar-color': '#e11d48' }}>
+              <div className="absolute top-0 left-0 right-0 h-0.5 rounded-t bg-coral" />
+              <div className="text-[10px] text-t3 font-semibold uppercase tracking-widest mb-2">Contradictions</div>
+              <div className="font-sora text-[26px] font-bold text-t1 leading-none">{((trust.contradiction_ratio ?? 0) * 100).toFixed(1)}%</div>
+              <div className="text-[11px] text-t2 mt-1">edge contradiction ratio</div>
+              <div className="pill-a mt-2">Validation</div>
+            </div>
+            <div className="mcard" style={{ '--bar-color': '#d97706' }}>
+              <div className="absolute top-0 left-0 right-0 h-0.5 rounded-t bg-amber" />
+              <div className="text-[10px] text-t3 font-semibold uppercase tracking-widest mb-2">Calibration error</div>
+              <div className="font-sora text-[26px] font-bold text-t1 leading-none">{((trust.calibration_proxy_error ?? 0) * 100).toFixed(1)}%</div>
+              <div className="text-[11px] text-t2 mt-1">confidence reliability proxy</div>
+              <div className="pill-g mt-2">Accuracy</div>
+            </div>
+          </div>
+        </div>
 
         {/* Sources */}
         {result?.sources?.length > 0 && (

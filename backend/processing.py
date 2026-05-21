@@ -15,6 +15,9 @@ from graph_builder import GraphBuilder
 from knowledge_schema import build_canonical_edges, build_canonical_nodes, validate_canonical_graph
 from wiki_builder import WikiBuilder
 
+# ML metrics contract import
+from metrics import RunMetrics
+
 logger = logging.getLogger(__name__)
 
 PROCESSED_DIR = "data/processed"
@@ -427,6 +430,26 @@ def process_file_pipeline(file_id: str, file_path: str, ext: str, embedding_stor
                 "entities_extracted": True, "graph_built": True, "indexed": True,
             },
         })
+
+        # ---- ML Metrics Artifact (observe-only, stub) ----
+        metrics_artifact = RunMetrics(
+            run_id=file_id,
+            stage="file_pipeline_completed",
+            timestamp=str(time.time()),
+            classification=None,
+            retrieval=None,
+            calibration=None,
+            hallucination=None,
+            extra={
+                "entities_count": len(entities),
+                "relations_count": len(relationships),
+                "canonical_entities_count": len(canonical_nodes),
+                "canonical_relations_count": len(canonical_edges),
+            },
+            version="1.0",
+        )
+        with open(f"{PROCESSED_DIR}/{file_id}_ml_metrics.json", "w") as f:
+            f.write(metrics_artifact.json(indent=2))
         logger.info(f"Pipeline complete: {file_id}")
 
     except Exception as e:

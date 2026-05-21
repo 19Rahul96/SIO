@@ -1,5 +1,5 @@
 import hashlib
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 
 def _stable_id(prefix: str, value: str) -> str:
@@ -99,7 +99,11 @@ def build_canonical_edges(file_id: str, relationships: List[Dict], mention_to_ca
     return edges
 
 
-def validate_canonical_graph(nodes: List[Dict], edges: List[Dict]) -> Dict:
+def validate_canonical_graph(
+    nodes: List[Dict],
+    edges: List[Dict],
+    eda_artifact: Optional[Dict[str, Any]] = None,
+) -> Dict:
     node_required = {
         "canonical_id",
         "label",
@@ -141,10 +145,29 @@ def validate_canonical_graph(nodes: List[Dict], edges: List[Dict]) -> Dict:
         if edge.get("target_canonical_id") not in node_ids:
             errors.append(f"edge[{idx}] target not found: {edge.get('target_canonical_id')}")
 
+    eda_validation = {
+        "checked": False,
+        "weak_evidence_count": 0,
+        "weak_evidence_keys": [],
+    }
+    if eda_artifact:
+        rel_evidence = (eda_artifact or {}).get("relationship_evidence", {})
+        weak_keys: List[str] = []
+        for key, payload in rel_evidence.items():
+            overlap = float((payload or {}).get("overlap_pct", 0.0) or 0.0)
+            if overlap < 0.2:
+                weak_keys.append(str(key))
+        eda_validation = {
+            "checked": True,
+            "weak_evidence_count": len(weak_keys),
+            "weak_evidence_keys": weak_keys[:25],
+        }
+
     return {
         "valid": len(errors) == 0,
         "node_count": len(nodes),
         "edge_count": len(edges),
         "error_count": len(errors),
         "errors": errors[:25],
+        "eda_validation": eda_validation,
     }

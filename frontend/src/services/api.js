@@ -112,6 +112,8 @@ const api = {
     req(`/retry/${fileId}`, { method: 'POST' }),
 
   getStats: () => req('/stats'),
+  getQualityMetrics: () => req('/quality/metrics'),
+  getMlMetrics: () => req('/metrics/aggregate'),
 
   getIngestionReport: () => req('/ingestion-report'),
 }

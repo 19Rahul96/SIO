@@ -93,12 +93,27 @@ def _node_type(node: Dict[str, Any]) -> str:
     return str(node.get("type") or node.get("node_type") or "entity").strip().lower()
 
 
-def map_graphify_to_canonical(graphify_graph: Dict[str, Any], db_id: str) -> Dict[str, List[Dict[str, Any]]]:
+def map_graphify_to_canonical(
+    graphify_graph: Dict[str, Any],
+    db_id: str,
+    eda_artifact: Dict[str, Any] | None = None,
+) -> Dict[str, List[Dict[str, Any]]]:
     nodes = graphify_graph.get("nodes", [])
     edges = graphify_graph.get("edges", [])
 
     node_by_key: Dict[str, Dict[str, Any]] = {}
     resolved_nodes: List[Dict[str, Any]] = []
+
+    table_stats = (eda_artifact or {}).get("table_stats", {})
+    rel_evidence = (eda_artifact or {}).get("relationship_evidence", {})
+
+    def _node_confidence(label: str, entity_type: str) -> float:
+        base = 0.8
+        if entity_type == "table":
+            tstats = table_stats.get(label, {})
+            risk_ratio = float(tstats.get("high_risk_ratio", 0.0) or 0.0)
+            base = base - min(0.18, risk_ratio * 0.18)
+        return max(0.45, min(0.95, base))
 
     for node in nodes:
         label = _node_label(node)
@@ -116,7 +131,7 @@ def map_graphify_to_canonical(graphify_graph: Dict[str, Any], db_id: str) -> Dic
                 "label": label,
                 "entity_type": entity_type,
                 "aliases": [label],
-                "confidence": 0.8,
+                "confidence": round(_node_confidence(label, entity_type), 4),
                 "provenance": [
                     {
                         "file_id": db_id,
@@ -141,12 +156,27 @@ def map_graphify_to_canonical(graphify_graph: Dict[str, Any], db_id: str) -> Dic
         conf = _EDGE_CONFIDENCE.get(raw_type, 0.6)
         relation = str(edge.get("relation") or edge.get("label") or "related_to").strip().lower()
 
+        src_label = str(node_by_key.get(src_key, {}).get("label") or "")
+        tgt_label = str(node_by_key.get(tgt_key, {}).get("label") or "")
+        rel_key_fragment = f"{src_label}." if src_label else ""
+        evidence_bonus = 0.0
+        for ekey, epayload in rel_evidence.items():
+            norm_key = str(ekey)
+            if src_label and tgt_label and src_label in norm_key and tgt_label in norm_key:
+                overlap = float((epayload or {}).get("overlap_pct", 0.0) or 0.0)
+                evidence_bonus = min(0.08, overlap * 0.08)
+                break
+            if rel_key_fragment and rel_key_fragment in norm_key:
+                overlap = float((epayload or {}).get("overlap_pct", 0.0) or 0.0)
+                evidence_bonus = min(0.05, overlap * 0.05)
+                break
+
         resolved_edges.append(
             {
                 "source_canonical_id": node_by_key[src_key]["canonical_id"],
                 "target_canonical_id": node_by_key[tgt_key]["canonical_id"],
                 "relation": relation,
-                "confidence": conf,
+                "confidence": round(min(0.99, conf + evidence_bonus), 4),
                 "edge_type": raw_type,
                 "provenance": [
                     {

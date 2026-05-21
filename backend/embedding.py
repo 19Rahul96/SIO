@@ -7,6 +7,11 @@ import numpy as np
 import faiss
 from typing import List, Dict, Optional
 
+# ML metrics contract import
+from metrics import RunMetrics
+import time
+import json
+
 logger = logging.getLogger(__name__)
 
 # ── SSL bypass for corporate proxy / SSL-inspection environments ──────────────
@@ -117,6 +122,30 @@ class EmbeddingStore:
             logger.warning("Embedding encode failed; using fallback embedding. Reason: %s", e)
             self._model = False
             return self._fallback_embed(text)
+
+    def search(self, query_emb: np.ndarray, k: int = 5, file_ids: Optional[List[str]] = None) -> List[Dict]:
+        # ...existing code...
+        # This is a stub for metrics emission; real metrics can be added as available.
+        try:
+            metrics_artifact = RunMetrics(
+                run_id=f"retrieval_{int(time.time()*1000)}",
+                stage="retrieval_ranking",
+                timestamp=str(time.time()),
+                classification=None,
+                retrieval=None,
+                calibration=None,
+                hallucination=None,
+                extra={
+                    "k": k,
+                    "file_ids": file_ids,
+                },
+                version="1.0",
+            )
+            with open(f"data/processed/retrieval_metrics_{int(time.time()*1000)}.json", "w") as f:
+                f.write(metrics_artifact.json(indent=2))
+        except Exception as e:
+            pass
+        # ...existing code continues...
 
     def _embed_batch(self, texts: List[str]) -> np.ndarray:
         try:

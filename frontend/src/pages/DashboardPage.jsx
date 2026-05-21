@@ -29,16 +29,36 @@ function Pyramid() {
 }
 
 export default function DashboardPage() {
-  const { startNewSession, setDashboardStats, dashboardStats } = useStore()
+  const {
+    startNewSession,
+    setDashboardStats,
+    dashboardStats,
+    setQualityMetrics,
+    qualityMetrics,
+    mlMetrics,
+    setMlMetrics,
+  } = useStore()
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     setLoading(true)
-    api.getStats()
-      .then(setDashboardStats)
+    Promise.all([
+      api.getStats(),
+      api.getQualityMetrics(),
+      api.getMlMetrics(),
+    ])
+      .then(([stats, quality, ml]) => {
+        setDashboardStats(stats)
+        setQualityMetrics(quality)
+        setMlMetrics(ml)
+      })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
+  // ML metrics summary
+  const mlCount = mlMetrics?.count ?? 0
+  const byStage = mlMetrics?.by_stage || {}
+  const recentMl = (mlMetrics?.metrics || []).slice(-4).reverse()
 
   const stats = dashboardStats || {}
   const tokensSaved = stats.tokens_saved ?? 0
@@ -46,6 +66,8 @@ export default function DashboardPage() {
   const filesIngested = stats.files_ingested ?? 0
   const costSaved = stats.cost_saved ?? 0
   const sessions = stats.recent_sessions ?? []
+  const trust = qualityMetrics?.trust || {}
+  const eda = qualityMetrics?.eda || {}
 
   return (
     <div>
@@ -98,6 +120,68 @@ export default function DashboardPage() {
             pillClass="pill-a"
             barColor="#d97706"
           />
+        </div>
+
+        <div className="h-6" />
+
+        <div className="sect">Trust and EDA quality</div>
+        <div className="grid grid-cols-4 gap-3.5">
+          <MetricCard
+            label="EDA runs"
+            value={eda.runs ?? 0}
+            sub="database pipelines"
+            pill={`evidence ${eda.relationship_evidence_count ?? 0}`}
+            pillClass="pill-b"
+            barColor="#0d9488"
+          />
+          <MetricCard
+            label="Anomalous tables"
+            value={eda.anomalous_table_count ?? 0}
+            sub="flagged by EDA"
+            pill="observe-only"
+            pillClass="pill-a"
+            barColor="#d97706"
+          />
+          <MetricCard
+            label="High-risk edges"
+            value={`${((trust.high_risk_edge_ratio ?? 0) * 100).toFixed(1)}%`}
+            sub="lower is better"
+            pill="graph trust"
+            pillClass="pill-g"
+            barColor="#2563eb"
+          />
+          <MetricCard
+            label="Calibration error"
+            value={`${((trust.calibration_proxy_error ?? 0) * 100).toFixed(1)}%`}
+            sub="confidence drift proxy"
+            pill="reliability"
+            pillClass="pill-t"
+            barColor="#e11d48"
+          />
+        </div>
+
+        <div className="h-6" />
+
+        <div className="sect">ML Metrics Instrumentation</div>
+        <div className="grid grid-cols-4 gap-3.5">
+          <MetricCard label="ML metrics runs" value={mlCount} sub="total artifacts" pillClass="pill-b" barColor="#4f46e5" />
+          <MetricCard label="LLM answers" value={byStage.llm_answer_generation?.length ?? 0} sub="answer checkpoints" pillClass="pill-g" barColor="#16a34a" />
+          <MetricCard label="Entity merges" value={byStage.entity_merge_decision?.length ?? 0} sub="entity checkpoints" pillClass="pill-a" barColor="#d97706" />
+          <MetricCard label="Cross-linking" value={byStage.cross_source_link_decision?.length ?? 0} sub="link checkpoints" pillClass="pill-t" barColor="#0d9488" />
+        </div>
+
+        <div className="h-4" />
+
+        <div className="sect">Recent ML metric runs</div>
+        <div className="grid grid-cols-4 gap-3.5">
+          {recentMl.map((m, i) => (
+            <div key={i} className="card p-3 text-[12px]">
+              <div className="font-bold text-t1 mb-1">{m.stage}</div>
+              <div className="text-t2 mb-1">{m.timestamp && new Date(Number(m.timestamp.split('.')[0]) * 1000).toLocaleString()}</div>
+              <div className="text-t3">run_id: {m.run_id?.slice(0, 12)}…</div>
+              <div className="text-t3">version: {m.version}</div>
+            </div>
+          ))}
         </div>
 
         <div className="h-6" />

@@ -31,7 +31,7 @@ Depends on: step 1.
 3. Confidence model and normalization policy
 Use weighted relationship formula v1:
 Final Edge Confidence =
-0.30 x LLM relation score +
+0.30 x Ollama/LLM relation score +
 0.25 x Evidence support +
 0.20 x Entity confidence +
 0.15 x Schema validity +
@@ -52,7 +52,7 @@ Depends on: step 2.
 
 4. Backend signal mapping table
 Map formula inputs to existing computed signals:
-- LLM relation score from graph relevance scoring in [backend/graph_builder.py](backend/graph_builder.py).
+- Ollama/LLM relation score from graph relevance scoring in [backend/graph_builder.py](backend/graph_builder.py).
 - Evidence support from provenance, citation counts, retrieval overlap in [backend/main.py](backend/main.py) and [backend/wiki_builder.py](backend/wiki_builder.py).
 - Entity confidence from canonical node confidence in [backend/graph_builder.py](backend/graph_builder.py).
 - Schema validity from ingestion/quality signals in [backend/main.py](backend/main.py).

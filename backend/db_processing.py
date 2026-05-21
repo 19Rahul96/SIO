@@ -11,6 +11,8 @@ from cross_source_linker import build_db_semantic_hints, link_cross_source
 from data_dictionary import upsert_from_profile
 from db_graphify import map_graphify_to_canonical, merge_into_canonical, parse_graphify_graph, run_graphify_extract
 from db_profiler import compute_accuracy_metrics, detect_implicit_relationships, profile_database
+from eda_engine import run_eda_engine
+from knowledge_schema import validate_canonical_graph
 from processing import chunk_text
 
 PROCESSED_DIR = "data/processed"
@@ -204,6 +206,7 @@ def init_db_status(db_id: str, engine: str, dbname: str = ""):
                 "connecting": False,
                 "introspecting": False,
                 "profiling": False,
+                "eda": False,
                 "graphify_running": False,
                 "merging": False,
                 "embedding": False,
@@ -260,6 +263,7 @@ def db_pipeline(db_id: str, conn_params: Dict[str, Any], embedding_store):
                     "connecting": True,
                     "introspecting": False,
                     "profiling": False,
+                    "eda": False,
                     "graphify_running": False,
                     "merging": False,
                     "embedding": False,
@@ -317,6 +321,7 @@ def db_pipeline(db_id: str, conn_params: Dict[str, Any], embedding_store):
                     "connecting": True,
                     "introspecting": True,
                     "profiling": False,
+                    "eda": False,
                     "graphify_running": False,
                     "merging": False,
                     "embedding": False,
@@ -350,11 +355,66 @@ def db_pipeline(db_id: str, conn_params: Dict[str, Any], embedding_store):
                 },
             )
 
+
         profile = profile_database(metadata, db_engine, progress_cb=_profile_progress)
         implicit_relationships = detect_implicit_relationships(metadata)
         profile["implicit_relationships"] = implicit_relationships
-        dictionary_report = upsert_from_profile(db_id=db_id, profile=profile)
+        column_confidences: List[float] = []
+        for t in profile.get("tables", []):
+            for c in t.get("columns", []):
+                column_confidences.append(float(c.get("semantic_confidence", 0.0) or 0.0))
+        pre_eda_baseline = {
+            "table_count": len(profile.get("tables", [])),
+            "implicit_relationship_count": len(implicit_relationships),
+            "semantic_mean_confidence": round(sum(column_confidences) / max(1, len(column_confidences)), 4),
+        }
+        _write_json(_profile_path(db_id), profile)
+
+        # EDA runs immediately after profiling and before graph/link confidence decisions.
+        eda_output_dir = os.path.join(PROCESSED_DIR, f"{db_id}_eda")
+        eda_artifact = None
+        eda_artifact_path = os.path.join(eda_output_dir, "eda_artifact.json")
+        try:
+            _write_status(
+                db_id,
+                {
+                    "status": "eda_running",
+                    "status_message": "Running EDA Engine (exploratory data analysis)",
+                    "pipeline_steps": {
+                        "connecting": True,
+                        "introspecting": True,
+                        "profiling": True,
+                        "eda": True,
+                        "graphify_running": False,
+                        "merging": False,
+                        "embedding": False,
+                    },
+                },
+            )
+            eda_artifact = run_eda_engine(profile, eda_output_dir)
+            _write_status(
+                db_id,
+                {
+                    "status": "eda_completed",
+                    "status_message": "EDA Engine completed",
+                    "eda_artifact_path": eda_artifact_path,
+                },
+            )
+        except Exception as eda_ex:
+            logger.warning(f"EDA Engine failed for {db_id}: {eda_ex}")
+            _write_status(
+                db_id,
+                {
+                    "status": "eda_failed",
+                    "status_message": f"EDA Engine failed: {eda_ex}",
+                },
+            )
+            eda_artifact = None
+
+        dictionary_report = upsert_from_profile(db_id=db_id, profile=profile, eda_artifact=eda_artifact)
         profile["dictionary_report"] = dictionary_report
+        if eda_artifact is not None:
+            profile["eda_summary"] = eda_artifact.get("summary", {})
         _write_json(_profile_path(db_id), profile)
 
         schema_dir = f"{DB_SCHEMA_ROOT}/{db_id}"
@@ -387,7 +447,7 @@ def db_pipeline(db_id: str, conn_params: Dict[str, Any], embedding_store):
                 "status_message": "Merging extracted graph into canonical knowledge graph",
             },
         )
-        mapped = map_graphify_to_canonical(graphify_graph, db_id)
+        mapped = map_graphify_to_canonical(graphify_graph, db_id, eda_artifact=eda_artifact)
         cross_link_result = {
             "source_id": db_id,
             "accepted_edges": [],
@@ -406,10 +466,16 @@ def db_pipeline(db_id: str, conn_params: Dict[str, Any], embedding_store):
                 source_nodes=mapped.get("resolved_nodes", []),
                 embed_fn=embedding_store.embed_text,
                 source_semantic_hints=db_semantic_hints,
+                relationship_evidence=(eda_artifact or {}).get("relationship_evidence", {}),
             )
             mapped["resolved_edges"] = mapped.get("resolved_edges", []) + cross_link_result.get("accepted_edges", [])
         except Exception as ex:
             logger.warning("Cross-source linking failed for %s: %s", db_id, ex)
+        schema_validation = validate_canonical_graph(
+            mapped.get("resolved_nodes", []),
+            mapped.get("resolved_edges", []),
+            eda_artifact=eda_artifact,
+        )
         merge_report = merge_into_canonical(db_id, mapped)
 
         _write_status(
@@ -423,8 +489,14 @@ def db_pipeline(db_id: str, conn_params: Dict[str, Any], embedding_store):
         chunks = chunk_text(corpus_text, size=300, overlap=50)
         embedding_store.add_chunks(db_id, chunks)
 
-        accuracy = compute_accuracy_metrics(metadata, profile, graphify_graph)
+        accuracy = compute_accuracy_metrics(metadata, profile, graphify_graph, eda_artifact=eda_artifact)
         _write_json(_accuracy_path(db_id), accuracy)
+
+        post_eda_effect = {
+            "relationship_evidence_count": int(((eda_artifact or {}).get("summary") or {}).get("relationship_evidence_count", 0) or 0),
+            "high_risk_edge_ratio": float((accuracy.get("graph_trust") or {}).get("high_risk_edge_ratio", 0.0) or 0.0),
+            "contradiction_ratio": float((accuracy.get("graph_trust") or {}).get("contradiction_ratio", 0.0) or 0.0),
+        }
 
         summary = {
             "db_id": db_id,
@@ -438,7 +510,14 @@ def db_pipeline(db_id: str, conn_params: Dict[str, Any], embedding_store):
             "merge_report": merge_report,
             "cross_link_report": cross_link_result.get("report", {}),
             "accuracy": accuracy,
+            "pre_eda_baseline": pre_eda_baseline,
+            "post_eda_effect": post_eda_effect,
             "dictionary_report": dictionary_report,
+            "schema_validation": schema_validation,
+            "eda": {
+                "artifact_path": eda_artifact_path if os.path.exists(eda_artifact_path) else None,
+                "summary": (eda_artifact or {}).get("summary", {}),
+            },
             "implicit_relationship_count": len(implicit_relationships),
             "completed_at": time.time(),
         }
@@ -456,11 +535,13 @@ def db_pipeline(db_id: str, conn_params: Dict[str, Any], embedding_store):
                 "semantic_inference": profile.get("semantic_inference", {}),
                 "dictionary_report": dictionary_report,
                 "cross_link_report": cross_link_result.get("report", {}),
+                "schema_validation": schema_validation,
                 "status_message": "DB ingestion pipeline completed",
                 "pipeline_steps": {
                     "connecting": True,
                     "introspecting": True,
                     "profiling": True,
+                    "eda": True,
                     "graphify_running": True,
                     "merging": True,
                     "embedding": True,

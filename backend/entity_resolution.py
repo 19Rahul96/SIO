@@ -7,6 +7,11 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 
+# ML metrics contract import
+from metrics import RunMetrics
+import time
+import json
+
 REGISTRY_PATH = "data/canonical_registry.json"
 MERGE_THRESHOLD = 0.72
 REVIEW_THRESHOLD = 0.58
@@ -108,7 +113,12 @@ def _node_strings(node: Dict) -> Tuple[str, List[str]]:
     return label, aliases
 
 
-def _candidate_score(node: Dict, existing: Dict, embed_fn: Optional[Callable[[str], np.ndarray]]) -> Tuple[float, Dict]:
+def _candidate_score(
+    node: Dict,
+    existing: Dict,
+    embed_fn: Optional[Callable[[str], np.ndarray]],
+    confidence_hints: Optional[Dict[str, float]] = None,
+) -> Tuple[float, Dict]:
     label, aliases = _node_strings(node)
     existing_label, existing_aliases = _node_strings(existing)
 
@@ -125,12 +135,21 @@ def _candidate_score(node: Dict, existing: Dict, embed_fn: Optional[Callable[[st
     compatibility = 1.0 if _type_compatible(node.get("entity_type", "entity"), existing.get("entity_type", "entity")) else 0.0
 
     score = (0.45 * emb) + (0.35 * lexical) + (0.2 * exact_norm)
+
+    # Optional external confidence hints (for example EDA-backed trust adjustments).
+    hint_delta = 0.0
+    if confidence_hints:
+        node_hint = float(confidence_hints.get(str(node.get("canonical_id") or ""), 0.0) or 0.0)
+        existing_hint = float(confidence_hints.get(str(existing.get("canonical_id") or ""), 0.0) or 0.0)
+        hint_delta = max(-0.12, min(0.12, (node_hint + existing_hint) / 2.0))
+    score = max(0.0, min(1.0, score + hint_delta))
     score = score * compatibility
 
     return score, {
         "exact_norm": round(exact_norm, 4),
         "lexical": round(lexical, 4),
         "embedding": round(emb, 4),
+        "confidence_hint_delta": round(hint_delta, 4),
         "type_compatible": bool(compatibility),
     }
 
@@ -148,6 +167,28 @@ def _merge_node(existing: Dict, incoming: Dict):
     prev_conf = float(existing.get("confidence", 0.6))
     inc_conf = float(incoming.get("confidence", 0.6))
     existing["confidence"] = round(min(0.98, (prev_conf * 0.8) + (inc_conf * 0.2)), 4)
+
+    # ---- ML Metrics Artifact (observe-only, stub) ----
+    try:
+        metrics_artifact = RunMetrics(
+            run_id=f"entity_merge_{int(time.time()*1000)}",
+            stage="entity_merge_decision",
+            timestamp=str(time.time()),
+            classification=None,
+            retrieval=None,
+            calibration=None,
+            hallucination=None,
+            extra={
+                "existing_label": existing.get("label"),
+                "incoming_label": incoming.get("label"),
+                "aliases_merged": list(existing_aliases),
+            },
+            version="1.0",
+        )
+        with open(f"data/processed/entity_metrics_{int(time.time()*1000)}.json", "w") as f:
+            f.write(metrics_artifact.json(indent=2))
+    except Exception as e:
+        pass
 
 
 def _append_pending_review(
@@ -179,6 +220,7 @@ def resolve_canonical_graph(
     nodes: List[Dict],
     edges: List[Dict],
     embed_fn: Optional[Callable[[str], np.ndarray]] = None,
+    confidence_hints: Optional[Dict[str, float]] = None,
 ) -> Dict:
     registry = _load_registry()
     global_nodes = registry.get("canonical_nodes", [])
@@ -214,7 +256,7 @@ def resolve_canonical_graph(
         best_candidate = None
         best_breakdown = {}
         for existing in global_nodes:
-            score, breakdown = _candidate_score(node, existing, embed_fn)
+            score, breakdown = _candidate_score(node, existing, embed_fn, confidence_hints=confidence_hints)
             if score > best_score:
                 best_score = score
                 best_candidate = existing

@@ -94,7 +94,7 @@ def _entry_snapshot(entry: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def upsert_from_profile(db_id: str, profile: Dict[str, Any]) -> Dict[str, Any]:
+def upsert_from_profile(db_id: str, profile: Dict[str, Any], eda_artifact: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     store = _load_store()
     tables = store.get("tables", {})
     columns = store.get("columns", {})
@@ -103,6 +103,9 @@ def upsert_from_profile(db_id: str, profile: Dict[str, Any]) -> Dict[str, Any]:
     tables_updated = 0
     columns_created = 0
     columns_updated = 0
+
+    eda_table_stats = (eda_artifact or {}).get("table_stats", {})
+    eda_anomalies = (eda_artifact or {}).get("anomaly_flags", {})
 
     for table in profile.get("tables", []):
         schema = table.get("schema")
@@ -137,6 +140,12 @@ def upsert_from_profile(db_id: str, profile: Dict[str, Any]) -> Dict[str, Any]:
         existing["semantic_confidence"] = round(semantic_confidence, 4)
         existing["semantic_method"] = semantic_method
         existing["business_definition"] = _derive_table_definition(table_name, semantic_label, table.get("columns", []))
+        table_eda = eda_table_stats.get(table_name, {})
+        existing["eda_summary"] = {
+            "high_risk_column_count": table_eda.get("high_risk_column_count", 0),
+            "high_risk_ratio": table_eda.get("high_risk_ratio", 0.0),
+            "anomaly_column_count": len((eda_anomalies.get(table_name) or {}).keys()),
+        }
         existing["lifecycle_status"] = _transition_status(existing.get("lifecycle_status", "draft"), semantic_changed)
         existing["source_db_ids"] = sorted(set(existing.get("source_db_ids", []) + [db_id]))
         existing["last_profiled_at"] = time.time()
@@ -181,6 +190,13 @@ def upsert_from_profile(db_id: str, profile: Dict[str, Any]) -> Dict[str, Any]:
             c_existing["null_pct"] = col.get("null_pct")
             c_existing["cardinality"] = col.get("cardinality")
             c_existing["sample_values"] = col.get("sample_values", [])[:10]
+            col_eda = (eda_table_stats.get(table_name, {}).get("columns", {}) or {}).get(col_name, {})
+            c_existing["eda"] = {
+                "null_rate": col_eda.get("null_rate"),
+                "uniqueness_ratio": col_eda.get("uniqueness_ratio"),
+                "outlier_count": col_eda.get("outlier_count"),
+                "anomalies": (eda_anomalies.get(table_name, {}) or {}).get(col_name, []),
+            }
             c_existing["lifecycle_status"] = _transition_status(c_existing.get("lifecycle_status", "draft"), c_changed)
             c_existing["source_db_ids"] = sorted(set(c_existing.get("source_db_ids", []) + [db_id]))
             c_existing["last_profiled_at"] = time.time()

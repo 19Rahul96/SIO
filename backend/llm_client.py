@@ -3,6 +3,11 @@ import logging
 from typing import List, Dict
 from dotenv import load_dotenv
 
+# ML metrics contract import
+from metrics import RunMetrics
+import time
+import json
+
 load_dotenv()
 logger = logging.getLogger(__name__)
 
@@ -49,21 +54,71 @@ def _available_provider_model(preferred_model: str) -> str | None:
     if provider == "anthropic" and ANTHROPIC_KEY:
         return preferred_model
     if provider == "openai" and OPENAI_KEY:
-        return preferred_model
+    retrieval_coverage: dict = None,
+    faithfulness: dict = None,
+    ) -> str:
     if provider == "gemini" and GEMINI_KEY:
         return preferred_model
 
     if OLLAMA_URL:
         return f"ollama/{OLLAMA_MODEL}"
+    # ---- ML Metrics Artifact (observe-only, stub) ----
+    try:
+        metrics_artifact = RunMetrics(
+            run_id=f"llm_{int(time.time()*1000)}",
+            stage="llm_answer_generation",
+            timestamp=str(time.time()),
+            classification=None,
+            retrieval=None,
+            calibration=None,
+            hallucination=None,
+            extra={
+                "prompt_length": len(prompt),
+                "context_length": len(context),
+                "answer_length": len(answer),
+                "model": model,
+                "provider": provider,
+            },
+            version="1.0",
+        )
+        with open(f"data/processed/llm_metrics_{int(time.time()*1000)}.json", "w") as f:
+            f.write(metrics_artifact.json(indent=2))
+    except Exception as e:
+        logger.warning("Failed to write LLM metrics artifact: %s", e)
+    # ---- Real metric calculations ----
+    classification = None
+    hallucination = None
+    if retrieval_coverage and faithfulness:
+        # Precision: supported sentences / total sentences
+        total = faithfulness.get("total_sentence_count", 0)
+        supported = faithfulness.get("supported_sentence_count", 0)
+        precision = (supported / total) if total else None
+        # Recall: covered prompt tokens / prompt token count
+        ptot = retrieval_coverage.get("prompt_token_count", 0)
+        pcov = retrieval_coverage.get("covered_prompt_tokens", 0)
+        recall = (pcov / ptot) if ptot else None
+        # F1
+        f1 = (2 * precision * recall / (precision + recall)) if precision is not None and recall is not None and (precision + recall) else None
+        classification = {
+            "precision": precision,
+            "recall": recall,
+            "f1": f1,
+            "support": total,
+        }
+        hallucination = {
+            "unsupported_claim_rate": 1.0 - precision if precision is not None else None,
+            "grounded_answer_rate": precision,
+            "citation_coverage": recall,
+        }
     if OPENAI_KEY:
         return "gpt-4o-mini"
     if ANTHROPIC_KEY:
         return "claude-haiku-4-5-20251001"
     if GEMINI_KEY:
-        return "gemini-2.0-flash"
+            classification=classification,
     return None
 
-
+            hallucination=hallucination,
 def _fmt_relations(rels: List[Dict]) -> str:
     if not rels:
         return "No graph relations."

@@ -345,12 +345,39 @@ class GraphBuilder:
         suppressed = [e for e in edges if e.get("suppressed")]
         active_edges = [e for e in edges if not e.get("suppressed")]
 
+        low_conf = 0
+        medium_conf = 0
+        high_conf = 0
+        contradictory = 0
+        for edge in active_edges:
+            conf = float(edge.get("confidence", 0.0) or 0.0)
+            if conf < 0.5:
+                low_conf += 1
+            elif conf < 0.8:
+                medium_conf += 1
+            else:
+                high_conf += 1
+
+            relation = str(edge.get("relation", "")).lower()
+            if "contradict" in relation or "ambiguous" in relation:
+                contradictory += 1
+
+        high_risk_edge_ratio = low_conf / max(1, len(active_edges))
+        contradiction_ratio = contradictory / max(1, len(active_edges))
+
         return {
             "node_count": len(nodes),
             "edge_count": len(edges),
             "active_edge_count": len(active_edges),
             "suppressed_edge_count": len(suppressed),
             "suppressed_ratio_pct": round((len(suppressed) / max(1, len(edges))) * 100, 2),
+            "high_risk_edge_ratio": round(high_risk_edge_ratio, 4),
+            "contradiction_ratio": round(contradiction_ratio, 4),
+            "edge_confidence_distribution": {
+                "low": low_conf,
+                "medium": medium_conf,
+                "high": high_conf,
+            },
             "stats": self._graph_stats(len(nodes), len(active_edges)),
         }
 

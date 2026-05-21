@@ -1,3 +1,5 @@
+# Aggregate and surface ML metrics artifacts for UI/analytics
+import glob
 import hashlib
 import json
 import logging
@@ -12,6 +14,9 @@ from dotenv import load_dotenv
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+# Import metrics contract for ML metrics
+from metrics import RunMetrics, AggregateMetrics
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -62,6 +67,36 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Expose metrics schema for validation and governance
+# Expose metrics schema for validation and governance
+@app.get("/metrics/schema")
+async def metrics_schema():
+    return {
+        "run_metrics_schema": RunMetrics.schema(),
+        "aggregate_metrics_schema": AggregateMetrics.schema(),
+        "version": RunMetrics.schema().get("version", "1.0"),
+    }
+
+
+# Aggregate all per-run metrics artifacts for UI/analytics
+@app.get("/metrics/aggregate")
+async def metrics_aggregate():
+    metrics_files = glob.glob("data/processed/*_metrics.json")
+    all_metrics = []
+    for path in metrics_files:
+        try:
+            with open(path) as f:
+                data = json.load(f)
+            all_metrics.append(data)
+        except Exception:
+            continue
+    # Group by stage for summary
+    by_stage = {}
+    for m in all_metrics:
+        stage = m.get("stage", "unknown")
+        by_stage.setdefault(stage, []).append(m)
+    return {"metrics": all_metrics, "by_stage": by_stage, "count": len(all_metrics)}
 
 for d in ["data/files", "data/processed", "data/graphs", "data/faiss"]:
     os.makedirs(d, exist_ok=True)
@@ -922,7 +957,9 @@ async def query(req: QueryRequest):
     explainability = _build_retrieval_explainability(req.prompt, profile, wiki_plan, graph_plan, chunks)
 
     from llm_client import call_llm
-    answer = await call_llm(req.prompt, context, rels)
+    retrieval_coverage = _retrieval_coverage(req.prompt, chunks, rels)
+    faithfulness = _faithfulness_check(answer, chunks, rels) if 'answer' in locals() else None
+    answer = await call_llm(req.prompt, context, rels, retrieval_coverage=retrieval_coverage, faithfulness=faithfulness)
     retrieval_coverage = _retrieval_coverage(req.prompt, chunks, rels)
     faithfulness = _faithfulness_check(answer, chunks, rels)
 
@@ -1050,6 +1087,49 @@ async def quality_metrics():
     dictionary = dictionary_metrics()
     links = cross_link_metrics()
 
+    db_quality_rows = []
+    for row in completed:
+        if str(row.get("ext", "")).upper() != "DB":
+            continue
+        fid = row.get("file_id")
+        if not fid:
+            continue
+        summary_path = f"data/processed/{fid}_db_summary.json"
+        if not os.path.exists(summary_path):
+            continue
+        try:
+            with open(summary_path, encoding="utf-8") as f:
+                db_quality_rows.append(json.load(f))
+        except Exception:
+            continue
+
+    eda_runs = len(db_quality_rows)
+    eda_anomalous_tables = 0
+    eda_relationship_evidence = 0
+    high_risk_edge_ratios: List[float] = []
+    contradiction_ratios: List[float] = []
+    calibration_errors: List[float] = []
+
+    for item in db_quality_rows:
+        eda_summary = (item.get("eda") or {}).get("summary", {})
+        eda_anomalous_tables += int(eda_summary.get("anomalous_table_count", 0) or 0)
+        eda_relationship_evidence += int(eda_summary.get("relationship_evidence_count", 0) or 0)
+
+        accuracy = item.get("accuracy", {})
+        graph_trust = accuracy.get("graph_trust", {})
+        conf_analysis = accuracy.get("confidence_analysis", {})
+
+        high_risk_edge_ratios.append(float(graph_trust.get("high_risk_edge_ratio", 0.0) or 0.0))
+        contradiction_ratios.append(float(graph_trust.get("contradiction_ratio", 0.0) or 0.0))
+        calibration_errors.append(float(conf_analysis.get("calibration_proxy_error", 0.0) or 0.0))
+
+    avg_high_risk_edge_ratio = sum(high_risk_edge_ratios) / max(1, len(high_risk_edge_ratios))
+    avg_contradiction_ratio = sum(contradiction_ratios) / max(1, len(contradiction_ratios))
+    avg_calibration_error = sum(calibration_errors) / max(1, len(calibration_errors))
+
+    knowledge_graph_effectiveness = max(0.0, 1.0 - ((avg_high_risk_edge_ratio + avg_contradiction_ratio) / 2.0))
+    relationship_effectiveness = min(1.0, eda_relationship_evidence / max(1, eda_runs * 10))
+
     return {
         "ingestion": {
             "total_files": len(all_files),
@@ -1069,6 +1149,24 @@ async def quality_metrics():
             "citation_coverage_pct": round((cited_fact_total / max(1, fact_total)) * 100, 2),
         },
         "cross_links": links,
+        "eda": {
+            "runs": eda_runs,
+            "anomalous_table_count": eda_anomalous_tables,
+            "relationship_evidence_count": eda_relationship_evidence,
+        },
+        "trust": {
+            "high_risk_edge_ratio": round(avg_high_risk_edge_ratio, 4),
+            "contradiction_ratio": round(avg_contradiction_ratio, 4),
+            "calibration_proxy_error": round(avg_calibration_error, 4),
+        },
+        "effectiveness": {
+            "knowledge_graph_effectiveness_score": round(knowledge_graph_effectiveness, 4),
+            "relationship_effectiveness_score": round(relationship_effectiveness, 4),
+            "confidence_transparency": {
+                "evidence_coverage_per_run": round(eda_relationship_evidence / max(1, eda_runs), 4) if eda_runs else 0.0,
+                "calibration_proxy_error": round(avg_calibration_error, 4),
+            },
+        },
         "updated_at": time.time(),
     }
 
