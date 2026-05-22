@@ -11,6 +11,7 @@ from ingestion import extract_corpus
 from cross_source_linker import link_cross_source
 from entity_extraction import extract_entities_from_chunks
 from entity_resolution import resolve_canonical_graph
+from file_eda_service import run_file_eda
 from graph_builder import GraphBuilder
 from knowledge_schema import build_canonical_edges, build_canonical_nodes, validate_canonical_graph
 from wiki_builder import WikiBuilder
@@ -145,6 +146,19 @@ def _write_status(file_id: str, updates: Dict):
         logger.error(f"Status write failed for {file_id}: {e}")
 
 
+def _read_json(path: str) -> Dict:
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            return data
+    except Exception:
+        pass
+    return {}
+
+
 @contextmanager
 def _status_heartbeat(file_id: str, status: str, status_message: str, interval_seconds: float = 15.0):
     stop_event = threading.Event()
@@ -206,6 +220,97 @@ def get_all_statuses() -> List[Dict]:
     return out
 
 
+def get_file_eda_artifacts(file_id: str) -> Dict:
+    payload = _read_json(f"{PROCESSED_DIR}/{file_id}_eda_artifacts.json")
+    if not payload:
+        return {}
+    summary_path = payload.get("summary_path")
+    graph_validation_path = payload.get("graph_validation_report_path")
+    folder_analytics_path = payload.get("folder_analytics_report_path")
+    scorecard_path = payload.get("kg_quality_scorecard_path")
+    visual_metrics_path = payload.get("visual_metrics_path")
+    return {
+        **payload,
+        "summary": _read_json(summary_path) if summary_path else {},
+        "graph_validation_report": _read_json(graph_validation_path) if graph_validation_path else {},
+        "folder_analytics_report": _read_json(folder_analytics_path) if folder_analytics_path else {},
+        "kg_quality_scorecard": _read_json(scorecard_path) if scorecard_path else {},
+        "visual_metrics": _read_json(visual_metrics_path) if visual_metrics_path else {},
+    }
+
+
+def get_file_eda_visuals(file_ids: Optional[List[str]] = None) -> Dict:
+    requested = set(file_ids or [])
+    runs: List[Dict] = []
+
+    if not os.path.exists(PROCESSED_DIR):
+        return {
+            "summary": {
+                "run_count": 0,
+                "avg_graph_density": 0.0,
+                "avg_overall_kg_quality": 0.0,
+                "avg_confidence_score": 0.0,
+                "avg_retrieval_readiness": 0.0,
+            },
+            "runs": [],
+            "updated_at": time.time(),
+        }
+
+    for fname in os.listdir(PROCESSED_DIR):
+        if not fname.endswith("_eda_artifacts.json"):
+            continue
+        file_id = fname[: -len("_eda_artifacts.json")]
+        if requested and file_id not in requested:
+            continue
+
+        bundle = _read_json(os.path.join(PROCESSED_DIR, fname))
+        if not bundle:
+            continue
+
+        summary = _read_json(bundle.get("summary_path", ""))
+        scorecard = _read_json(bundle.get("kg_quality_scorecard_path", ""))
+        visuals = _read_json(bundle.get("visual_metrics_path", ""))
+        status = get_file_status(file_id) or {}
+
+        runs.append(
+            {
+                "file_id": file_id,
+                "filename": status.get("filename", file_id),
+                "completed_at": status.get("completed_at", 0),
+                "source": (summary.get("source") or {}).get("ext", "unknown"),
+                "graph_density": float(visuals.get("graph_density", 0.0) or 0.0),
+                "overall_kg_quality_score": float(scorecard.get("overall_kg_quality_score", 0.0) or 0.0),
+                "confidence_score": float(scorecard.get("confidence_score", 0.0) or 0.0),
+                "retrieval_readiness_score": float(scorecard.get("retrieval_readiness_score", 0.0) or 0.0),
+                "node_centrality": visuals.get("node_centrality", [])[:10],
+                "entity_distribution": visuals.get("entity_distribution", []),
+                "relation_distributions": visuals.get("relation_distributions", []),
+                "confidence_histograms": visuals.get("confidence_histograms", {}),
+                "semantic_clusters": visuals.get("semantic_clusters", []),
+            }
+        )
+
+    runs.sort(key=lambda x: float(x.get("completed_at", 0) or 0), reverse=True)
+
+    run_count = len(runs)
+    avg_graph_density = sum(float(r.get("graph_density", 0.0) or 0.0) for r in runs) / max(1, run_count)
+    avg_overall_quality = sum(float(r.get("overall_kg_quality_score", 0.0) or 0.0) for r in runs) / max(1, run_count)
+    avg_confidence = sum(float(r.get("confidence_score", 0.0) or 0.0) for r in runs) / max(1, run_count)
+    avg_retrieval_readiness = sum(float(r.get("retrieval_readiness_score", 0.0) or 0.0) for r in runs) / max(1, run_count)
+
+    return {
+        "summary": {
+            "run_count": run_count,
+            "avg_graph_density": round(avg_graph_density, 6),
+            "avg_overall_kg_quality": round(avg_overall_quality, 4),
+            "avg_confidence_score": round(avg_confidence, 4),
+            "avg_retrieval_readiness": round(avg_retrieval_readiness, 4),
+        },
+        "runs": runs,
+        "updated_at": time.time(),
+    }
+
+
 def process_file_pipeline(file_id: str, file_path: str, ext: str, embedding_store):
     try:
         logger.info(f"Pipeline start: {file_id}")
@@ -231,7 +336,7 @@ def process_file_pipeline(file_id: str, file_path: str, ext: str, embedding_stor
             "corpus_profile": corpus_profile,
             "pipeline_steps": {
                 "cleaned": True, "chunked": False,
-                "entities_extracted": False, "graph_built": False, "indexed": False,
+                "entities_extracted": False, "eda_validated": False, "graph_built": False, "indexed": False,
             },
         })
         time.sleep(0.3)
@@ -248,7 +353,7 @@ def process_file_pipeline(file_id: str, file_path: str, ext: str, embedding_stor
             "chunk_validation_report": chunk_validation_report,
             "pipeline_steps": {
                 "cleaned": True, "chunked": True,
-                "entities_extracted": False, "graph_built": False, "indexed": False,
+                "entities_extracted": False, "eda_validated": False, "graph_built": False, "indexed": False,
             },
         })
         time.sleep(0.3)
@@ -260,7 +365,7 @@ def process_file_pipeline(file_id: str, file_path: str, ext: str, embedding_stor
             "status_message": "Extracting entities and resolving canonical graph",
             "pipeline_steps": {
                 "cleaned": True, "chunked": True,
-                "entities_extracted": False, "graph_built": False, "indexed": False,
+                "entities_extracted": False, "eda_validated": False, "graph_built": False, "indexed": False,
             },
         })
         # 4. Per-chunk entity extraction — every entity/relationship carries chunk_idx
@@ -349,31 +454,93 @@ def process_file_pipeline(file_id: str, file_path: str, ext: str, embedding_stor
             },
             "pipeline_steps": {
                 "cleaned": True, "chunked": True,
-                "entities_extracted": True, "graph_built": False, "indexed": False,
+                "entities_extracted": True, "eda_validated": False, "graph_built": False, "indexed": False,
             },
         })
         time.sleep(0.3)
 
-        # 5. Build graph
-        _graph_builder.build_graph(file_id, entities, relationships)
+        # 5. Run EDA + knowledge quality validation
+        eda_result: Dict = {}
+        optimized_entities = entities
+        optimized_relationships = relationships
+        _write_status(file_id, {
+            "status": "eda_validating",
+            "error": None,
+            "status_message": "Running EDA and knowledge quality validation",
+            "pipeline_steps": {
+                "cleaned": True, "chunked": True,
+                "entities_extracted": True, "eda_validated": False, "graph_built": False, "indexed": False,
+            },
+        })
+        with _status_heartbeat(
+            file_id,
+            status="eda_validating",
+            status_message="Running EDA and knowledge quality validation",
+        ):
+            try:
+                eda_result = run_file_eda(
+                    file_id=file_id,
+                    ext=ext,
+                    corpus=corpus,
+                    entities=entities,
+                    relationships=relationships,
+                    canonical_nodes=canonical_nodes,
+                    canonical_edges=canonical_edges,
+                    resolved_nodes=resolved_nodes,
+                    resolution_report=resolution_report,
+                    chunk_validation_report=chunk_validation_report,
+                )
+                optimized_entities = eda_result.get("optimized_entities", entities) or entities
+                optimized_relationships = eda_result.get("optimized_relationships", relationships) or relationships
+            except Exception as ex:
+                logger.warning("File EDA failed for %s: %s", file_id, ex)
+                eda_result = {
+                    "summary": {},
+                    "scorecard": {},
+                    "visuals": {},
+                    "artifacts": {},
+                    "reprocess_recommended": False,
+                    "error": str(ex),
+                }
+
+        _write_status(file_id, {
+            "status": "eda_completed",
+            "error": None,
+            "status_message": "EDA and knowledge quality validation completed",
+            "eda_summary": {
+                "entity_count": len(optimized_entities),
+                "relationship_count": len(optimized_relationships),
+                "graph_density": ((eda_result.get("visuals") or {}).get("graph_density", 0.0)),
+                "overall_kg_quality_score": ((eda_result.get("scorecard") or {}).get("overall_kg_quality_score", 0.0)),
+            },
+            "eda_artifacts": eda_result.get("artifacts", {}),
+            "reprocess_recommended": bool(eda_result.get("reprocess_recommended", False)),
+            "pipeline_steps": {
+                "cleaned": True, "chunked": True,
+                "entities_extracted": True, "eda_validated": True, "graph_built": False, "indexed": False,
+            },
+        })
+
+        # 6. Build optimized graph
+        _graph_builder.build_graph(file_id, optimized_entities, optimized_relationships)
         _write_status(file_id, {
             "status": "graph_built",
             "error": None,
             "pipeline_steps": {
                 "cleaned": True, "chunked": True,
-                "entities_extracted": True, "graph_built": True, "indexed": False,
+                "entities_extracted": True, "eda_validated": True, "graph_built": True, "indexed": False,
             },
         })
         time.sleep(0.3)
 
-        # 6. Embed & index
+        # 7. Embed & index
         _write_status(file_id, {
             "status": "indexing",
             "error": None,
             "status_message": "Building embeddings and updating retrieval index",
             "pipeline_steps": {
                 "cleaned": True, "chunked": True,
-                "entities_extracted": True, "graph_built": True, "indexed": False,
+                "entities_extracted": True, "eda_validated": True, "graph_built": True, "indexed": False,
             },
         })
         with _status_heartbeat(
@@ -383,7 +550,7 @@ def process_file_pipeline(file_id: str, file_path: str, ext: str, embedding_stor
         ):
             embedding_store.add_chunks(file_id, chunks)
 
-        # 7. Save processed preview
+        # 8. Save processed preview
         with open(f"{PROCESSED_DIR}/{file_id}_data.json", "w") as f:
             json.dump({
                 "file_id": file_id,
@@ -393,8 +560,8 @@ def process_file_pipeline(file_id: str, file_path: str, ext: str, embedding_stor
                 "text_blocks_preview": corpus.get("text_blocks", [])[:20],
                 "chunks_count": len(chunks),
                 "chunk_validation_report": chunk_validation_report,
-                "entities": entities[:50],        # first-seen chunk_idx preserved
-                "relationships": relationships[:100],
+                "entities": optimized_entities[:50],
+                "relationships": optimized_relationships[:100],
                 "chunk_grounded": True,            # flag: graph elements are chunk-traceable
                 "canonical_entities_count": len(canonical_nodes),
                 "canonical_relations_count": len(canonical_edges),
@@ -403,6 +570,11 @@ def process_file_pipeline(file_id: str, file_path: str, ext: str, embedding_stor
                 "cross_link_report": cross_link_result.get("report", {}),
                 "canonical_upsert": canonical_upsert,
                 "wiki_page_report": wiki_page_report,
+                "eda_summary": eda_result.get("summary", {}),
+                "kg_quality_scorecard": eda_result.get("scorecard", {}),
+                "eda_visual_metrics": eda_result.get("visuals", {}),
+                "eda_artifacts": eda_result.get("artifacts", {}),
+                "reprocess_recommended": bool(eda_result.get("reprocess_recommended", False)),
             }, f)
 
         _write_status(file_id, {
@@ -420,6 +592,15 @@ def process_file_pipeline(file_id: str, file_path: str, ext: str, embedding_stor
             },
             "cross_link_report": cross_link_result.get("report", {}),
             "canonical_upsert": canonical_upsert,
+            "eda_summary": {
+                "entity_count": len(optimized_entities),
+                "relationship_count": len(optimized_relationships),
+                "graph_density": ((eda_result.get("visuals") or {}).get("graph_density", 0.0)),
+                "overall_kg_quality_score": ((eda_result.get("scorecard") or {}).get("overall_kg_quality_score", 0.0)),
+            },
+            "kg_quality_scorecard": eda_result.get("scorecard", {}),
+            "eda_artifacts": eda_result.get("artifacts", {}),
+            "reprocess_recommended": bool(eda_result.get("reprocess_recommended", False)),
             "wiki_page_report": {
                 "pages_created": wiki_page_report.get("pages_created", 0),
                 "pages_updated": wiki_page_report.get("pages_updated", 0),
@@ -427,7 +608,7 @@ def process_file_pipeline(file_id: str, file_path: str, ext: str, embedding_stor
             },
             "pipeline_steps": {
                 "cleaned": True, "chunked": True,
-                "entities_extracted": True, "graph_built": True, "indexed": True,
+                "entities_extracted": True, "eda_validated": True, "graph_built": True, "indexed": True,
             },
         })
 
@@ -443,8 +624,11 @@ def process_file_pipeline(file_id: str, file_path: str, ext: str, embedding_stor
             extra={
                 "entities_count": len(entities),
                 "relations_count": len(relationships),
+                "optimized_entities_count": len(optimized_entities),
+                "optimized_relations_count": len(optimized_relationships),
                 "canonical_entities_count": len(canonical_nodes),
                 "canonical_relations_count": len(canonical_edges),
+                "overall_kg_quality_score": ((eda_result.get("scorecard") or {}).get("overall_kg_quality_score", 0.0)),
             },
             version="1.0",
         )
@@ -508,7 +692,7 @@ def retry_indexing_pipeline(file_id: str, file_path: str, ext: str, embedding_st
             "corpus_profile": corpus_profile,
             "pipeline_steps": {
                 "cleaned": True, "chunked": True,
-                "entities_extracted": True, "graph_built": True, "indexed": True,
+                "entities_extracted": True, "eda_validated": os.path.exists(f"{PROCESSED_DIR}/{file_id}_eda_summary.json"), "graph_built": True, "indexed": True,
             },
         })
         logger.info(f"Retry indexing complete: {file_id}")

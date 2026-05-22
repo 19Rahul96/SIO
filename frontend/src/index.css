@@ -125,3 +125,7 @@ body {
 @keyframes pillpulse { 0%,100%{opacity:1}50%{opacity:.5} }
 @keyframes blink { 0%,100%{opacity:1}50%{opacity:.12} }
 .animate-blink { animation: blink 1.3s infinite; }
+
+.gap-3 {
+  gap: 3.75rem;
+}

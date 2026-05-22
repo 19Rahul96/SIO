@@ -4,7 +4,7 @@ import os
 import sqlite3
 import time
 from json import JSONDecodeError
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from db_connector import connect_db, export_schema_as_corpus_text, export_schema_as_ddl, get_schema_metadata
 from cross_source_linker import build_db_semantic_hints, link_cross_source
@@ -241,6 +241,202 @@ def get_db_schema(db_id: str) -> Dict[str, Any]:
 
 def get_db_accuracy(db_id: str) -> Dict[str, Any]:
     return _read_json(_accuracy_path(db_id))
+
+
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except Exception:
+        return default
+
+
+def get_eda_visuals(file_ids: Optional[List[str]] = None) -> Dict[str, Any]:
+    requested = set(file_ids or [])
+    runs: List[Dict[str, Any]] = []
+
+    if not os.path.exists(PROCESSED_DIR):
+        return {
+            "summary": {
+                "run_count": 0,
+                "table_count": 0,
+                "anomalous_table_count": 0,
+                "relationship_evidence_count": 0,
+                "avg_overall_kg_quality": 0.0,
+                "avg_confidence_score": 0.0,
+                "avg_retrieval_readiness": 0.0,
+                "avg_graph_trust_score": 0.0,
+                "avg_knowledge_graph_effectiveness": 0.0,
+                "avg_relationship_effectiveness": 0.0,
+                "avg_high_risk_edge_ratio": 0.0,
+                "avg_contradiction_ratio": 0.0,
+                "avg_calibration_proxy_error": 0.0,
+                "joinability_distribution": {"strong": 0, "medium": 0, "weak": 0},
+            },
+            "runs": [],
+            "updated_at": time.time(),
+        }
+
+    for fname in os.listdir(PROCESSED_DIR):
+        if not fname.endswith("_db_summary.json"):
+            continue
+
+        db_id = fname[: -len("_db_summary.json")]
+        if requested and db_id not in requested:
+            continue
+
+        summary_path = os.path.join(PROCESSED_DIR, fname)
+        summary = _read_json(summary_path)
+        if not summary:
+            continue
+
+        eda_section = summary.get("eda", {})
+        artifact_path = eda_section.get("artifact_path")
+        artifact = _read_json(artifact_path) if artifact_path else {}
+
+        eda_summary = eda_section.get("summary", {})
+        table_stats = artifact.get("table_stats", {})
+        anomaly_flags = artifact.get("anomaly_flags", {})
+        rel_evidence = artifact.get("relationship_evidence", {})
+
+        accuracy = summary.get("accuracy", {})
+        graph_trust = accuracy.get("graph_trust", {})
+        confidence_analysis = accuracy.get("confidence_analysis", {})
+
+        joinability_distribution = {"strong": 0, "medium": 0, "weak": 0}
+        for rel in rel_evidence.values():
+            level = str(rel.get("joinability_signal", "weak")).lower()
+            if level not in joinability_distribution:
+                level = "weak"
+            joinability_distribution[level] += 1
+
+        semantic_confidence = accuracy.get("semantic_confidence", {})
+        relationship_effectiveness = accuracy.get("relationship_effectiveness", {})
+
+        confidence_score = _safe_float(semantic_confidence.get("mean_confidence", 0.0))
+        trust_score = max(
+            0.0,
+            min(
+                1.0,
+                (0.45 * (1.0 - _safe_float(graph_trust.get("high_risk_edge_ratio", 0.0))))
+                + (0.35 * relationship_effectiveness.get("evidence_success_rate", 0.0))
+                + (0.2 * (1.0 - _safe_float(confidence_analysis.get("calibration_proxy_error", 0.0)))),
+            ),
+        )
+        retrieval_readiness = max(
+            0.0,
+            min(
+                1.0,
+                (0.5 * confidence_score)
+                + (0.35 * relationship_effectiveness.get("evidence_success_rate", 0.0))
+                + (0.15 * (1.0 - _safe_float(graph_trust.get("contradiction_ratio", 0.0)))),
+            ),
+        )
+        overall_quality = max(
+            0.0,
+            min(
+                1.0,
+                (0.45 * trust_score) + (0.3 * confidence_score) + (0.25 * retrieval_readiness),
+            ),
+        )
+
+        top_tables = []
+        for table_name, stats in table_stats.items():
+            top_tables.append(
+                {
+                    "table_name": table_name,
+                    "column_count": int(stats.get("column_count", 0) or 0),
+                    "high_risk_column_count": int(stats.get("high_risk_column_count", 0) or 0),
+                    "high_risk_ratio": _safe_float(stats.get("high_risk_ratio", 0.0)),
+                }
+            )
+        top_tables.sort(key=lambda x: x["high_risk_ratio"], reverse=True)
+
+        top_relationships = []
+        for rel_key, rel in rel_evidence.items():
+            top_relationships.append(
+                {
+                    "key": rel_key,
+                    "overlap_pct": _safe_float(rel.get("overlap_pct", 0.0)),
+                    "overlap_count": int(rel.get("overlap_count", 0) or 0),
+                    "left_sample_count": int(rel.get("left_sample_count", 0) or 0),
+                    "right_sample_count": int(rel.get("right_sample_count", 0) or 0),
+                    "joinability_signal": rel.get("joinability_signal", "weak"),
+                    "basis": rel.get("basis", "implicit"),
+                }
+            )
+        top_relationships.sort(key=lambda x: x["overlap_pct"], reverse=True)
+
+        status = get_db_status(db_id)
+        runs.append(
+            {
+                "db_id": db_id,
+                "status": status.get("status", "unknown"),
+                "engine": status.get("engine") or "db",
+                "database": status.get("database") or db_id,
+                "completed_at": summary.get("completed_at", status.get("completed_at", 0)),
+                "generated_at": artifact.get("generated_at", 0),
+                "overall_kg_quality_score": round(overall_quality, 4),
+                "confidence_score": round(confidence_score, 4),
+                "retrieval_readiness_score": round(retrieval_readiness, 4),
+                "graph_trust_score": round(trust_score, 4),
+                "eda_summary": {
+                    "table_count": int(eda_summary.get("table_count", 0) or 0),
+                    "anomalous_table_count": int(eda_summary.get("anomalous_table_count", 0) or 0),
+                    "relationship_evidence_count": int(eda_summary.get("relationship_evidence_count", 0) or 0),
+                },
+                "trust": {
+                    "high_risk_edge_ratio": _safe_float(graph_trust.get("high_risk_edge_ratio", 0.0)),
+                    "contradiction_ratio": _safe_float(graph_trust.get("contradiction_ratio", 0.0)),
+                    "calibration_proxy_error": _safe_float(confidence_analysis.get("calibration_proxy_error", 0.0)),
+                },
+                "joinability_distribution": joinability_distribution,
+                "anomaly_table_count": len(anomaly_flags),
+                "top_tables": top_tables[:10],
+                "top_relationship_evidence": top_relationships[:12],
+            }
+        )
+
+    runs.sort(key=lambda x: float(x.get("completed_at", 0) or 0), reverse=True)
+
+    total_tables = sum(int(r.get("eda_summary", {}).get("table_count", 0) or 0) for r in runs)
+    total_anomalous = sum(int(r.get("eda_summary", {}).get("anomalous_table_count", 0) or 0) for r in runs)
+    total_rel_evidence = sum(int(r.get("eda_summary", {}).get("relationship_evidence_count", 0) or 0) for r in runs)
+
+    avg_high_risk = sum(_safe_float(r.get("trust", {}).get("high_risk_edge_ratio", 0.0)) for r in runs) / max(1, len(runs))
+    avg_contradiction = sum(_safe_float(r.get("trust", {}).get("contradiction_ratio", 0.0)) for r in runs) / max(1, len(runs))
+    avg_calibration = sum(_safe_float(r.get("trust", {}).get("calibration_proxy_error", 0.0)) for r in runs) / max(1, len(runs))
+    avg_overall_quality = sum(_safe_float(r.get("overall_kg_quality_score", 0.0)) for r in runs) / max(1, len(runs))
+    avg_confidence = sum(_safe_float(r.get("confidence_score", 0.0)) for r in runs) / max(1, len(runs))
+    avg_retrieval_readiness = sum(_safe_float(r.get("retrieval_readiness_score", 0.0)) for r in runs) / max(1, len(runs))
+    avg_trust = sum(_safe_float(r.get("graph_trust_score", 0.0)) for r in runs) / max(1, len(runs))
+
+    joinability_distribution = {"strong": 0, "medium": 0, "weak": 0}
+    for run in runs:
+        dist = run.get("joinability_distribution", {})
+        joinability_distribution["strong"] += int(dist.get("strong", 0) or 0)
+        joinability_distribution["medium"] += int(dist.get("medium", 0) or 0)
+        joinability_distribution["weak"] += int(dist.get("weak", 0) or 0)
+
+    return {
+        "summary": {
+            "run_count": len(runs),
+            "table_count": total_tables,
+            "anomalous_table_count": total_anomalous,
+            "relationship_evidence_count": total_rel_evidence,
+            "avg_overall_kg_quality": round(avg_overall_quality, 4),
+            "avg_confidence_score": round(avg_confidence, 4),
+            "avg_retrieval_readiness": round(avg_retrieval_readiness, 4),
+            "avg_graph_trust_score": round(avg_trust, 4),
+            "avg_knowledge_graph_effectiveness": round(avg_overall_quality, 4),
+            "avg_relationship_effectiveness": round(avg_confidence, 4),
+            "avg_high_risk_edge_ratio": round(avg_high_risk, 4),
+            "avg_contradiction_ratio": round(avg_contradiction, 4),
+            "avg_calibration_proxy_error": round(avg_calibration, 4),
+            "joinability_distribution": joinability_distribution,
+        },
+        "runs": runs,
+        "updated_at": time.time(),
+    }
 
 
 def db_pipeline(db_id: str, conn_params: Dict[str, Any], embedding_store):

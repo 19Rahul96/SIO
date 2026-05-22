@@ -113,6 +113,17 @@ const api = {
 
   getStats: () => req('/stats'),
   getQualityMetrics: () => req('/quality/metrics'),
+  getEdaVisuals: (fileIds = []) => {
+    const qs = fileIds.length ? `?file_ids=${fileIds.join(',')}` : ''
+    return req(`/eda/visuals${qs}`)
+  },
+  getEdaDashboard: ({ fileIds = [], dbIds = [] } = {}) => {
+    const params = new URLSearchParams()
+    if (fileIds.length) params.set('file_ids', fileIds.join(','))
+    if (dbIds.length) params.set('db_ids', dbIds.join(','))
+    const qs = params.toString()
+    return req(`/eda/dashboard${qs ? `?${qs}` : ''}`)
+  },
   getMlMetrics: () => req('/metrics/aggregate'),
 
   getIngestionReport: () => req('/ingestion-report'),

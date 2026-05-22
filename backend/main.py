@@ -42,6 +42,7 @@ from db_processing import (
     get_db_profile,
     get_db_schema,
     get_db_status,
+    get_eda_visuals,
     init_db_status,
 )
 from embedding import EmbeddingStore
@@ -53,7 +54,14 @@ from entity_resolution import (
 )
 from entity_extraction import extract_entities
 from graph_builder import GraphBuilder
-from processing import get_all_statuses, get_file_status, process_file_pipeline, retry_indexing_pipeline
+from processing import (
+    get_all_statuses,
+    get_file_eda_artifacts,
+    get_file_eda_visuals,
+    get_file_status,
+    process_file_pipeline,
+    retry_indexing_pipeline,
+)
 from router import ModelRouter
 from slm import SLMRegistry
 from trace import TraceEngine
@@ -526,7 +534,7 @@ async def upload(
         "checksum": checksum,
         "pipeline_steps": {
             "cleaned": False, "chunked": False,
-            "entities_extracted": False, "graph_built": False, "indexed": False,
+            "entities_extracted": False, "eda_validated": False, "graph_built": False, "indexed": False,
         },
         "entities_count": 0,
         "relations_count": 0,
@@ -704,6 +712,86 @@ async def db_accuracy(db_id: str):
     return accuracy
 
 
+@app.get("/eda/visuals")
+async def eda_visuals(file_ids: Optional[str] = Query(None)):
+    requested = None
+    if file_ids:
+        requested = [x.strip() for x in file_ids.split(",") if x.strip()]
+    return get_eda_visuals(requested)
+
+
+@app.get("/eda/file/visuals")
+async def file_eda_visuals(file_ids: Optional[str] = Query(None)):
+    requested = None
+    if file_ids:
+        requested = [x.strip() for x in file_ids.split(",") if x.strip()]
+    return get_file_eda_visuals(requested)
+
+
+@app.get("/eda/file/{file_id}")
+async def file_eda_report(file_id: str):
+    payload = get_file_eda_artifacts(file_id)
+    if not payload:
+        raise HTTPException(404, "File EDA artifacts not found")
+    return payload
+
+
+@app.get("/eda/dashboard")
+async def eda_dashboard(file_ids: Optional[str] = Query(None), db_ids: Optional[str] = Query(None)):
+    requested_file_ids = None
+    requested_db_ids = None
+
+    if file_ids:
+        requested_file_ids = [x.strip() for x in file_ids.split(",") if x.strip()]
+    if db_ids:
+        requested_db_ids = [x.strip() for x in db_ids.split(",") if x.strip()]
+
+    db_visuals = get_eda_visuals(requested_db_ids)
+    file_visuals = get_file_eda_visuals(requested_file_ids)
+
+    db_summary = db_visuals.get("summary", {})
+    file_summary = file_visuals.get("summary", {})
+
+    db_run_count = int(db_summary.get("run_count", 0) or 0)
+    file_run_count = int(file_summary.get("run_count", 0) or 0)
+    total_runs = db_run_count + file_run_count
+
+    combined_quality = (
+        (float(db_summary.get("avg_overall_kg_quality", db_summary.get("avg_knowledge_graph_effectiveness", 0.0)) or 0.0) * db_run_count)
+        + (float(file_summary.get("avg_overall_kg_quality", 0.0) or 0.0) * file_run_count)
+    ) / max(1, total_runs)
+
+    combined_confidence = (
+        (float(db_summary.get("avg_confidence_score", db_summary.get("avg_relationship_effectiveness", 0.0)) or 0.0) * db_run_count)
+        + (float(file_summary.get("avg_confidence_score", 0.0) or 0.0) * file_run_count)
+    ) / max(1, total_runs)
+
+    combined_retrieval_readiness = (
+        (float(db_summary.get("avg_retrieval_readiness", 0.0) or 0.0) * db_run_count)
+        + (float(file_summary.get("avg_retrieval_readiness", 0.0) or 0.0) * file_run_count)
+    ) / max(1, total_runs)
+
+    combined_trust = (
+        (float(db_summary.get("avg_graph_trust_score", 0.0) or 0.0) * db_run_count)
+        + (float(file_summary.get("avg_confidence_score", 0.0) or 0.0) * file_run_count)
+    ) / max(1, total_runs)
+
+    return {
+        "summary": {
+            "total_runs": total_runs,
+            "db_run_count": db_run_count,
+            "file_run_count": file_run_count,
+            "combined_quality_score": round(combined_quality, 4),
+            "combined_confidence_score": round(combined_confidence, 4),
+            "combined_retrieval_readiness_score": round(combined_retrieval_readiness, 4),
+            "combined_trust_score": round(combined_trust, 4),
+            "updated_at": time.time(),
+        },
+        "db_eda": db_visuals,
+        "file_eda": file_visuals,
+    }
+
+
 @app.get("/dictionary/tables")
 async def dictionary_tables(
     q: Optional[str] = Query(None),
@@ -857,7 +945,7 @@ async def scrape(req: ScrapeRequest, background_tasks: BackgroundTasks):
             "checksum": checksum,
             "pipeline_steps": {
                 "cleaned": False, "chunked": False,
-                "entities_extracted": False, "graph_built": False, "indexed": False,
+                "entities_extracted": False, "eda_validated": False, "graph_built": False, "indexed": False,
             },
             "entities_count": 0, "relations_count": 0, "chunks_count": 0,
             "uploaded_at": time.time(),

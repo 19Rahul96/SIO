@@ -1,4 +1,5 @@
 import useStore from '../store'
+import c5iLogo from '../assests/c5i-primary-logo.svg'
 
 const STEPS = ['Dashboard', '① Inject', '② Prompt', '③ Model', '④ Results']
 
@@ -17,13 +18,11 @@ export default function Topbar() {
     >
       {/* Brand */}
       <a className="flex items-center gap-3 font-sora font-bold text-lg text-t1 no-underline" href="#">
-        <div
-          className="w-8 h-8 bg-accent rounded-[9px] flex items-center justify-center flex-shrink-0"
-        >
-          <svg viewBox="0 0 14 14" width="14" height="14" fill="none">
-            <polygon points="7,1 13,13 1,13" fill="white" opacity=".95" />
-          </svg>
-        </div>
+        <img
+          src={c5iLogo}
+          alt="C5i logo"
+          className="h-8 w-auto flex-shrink-0"
+        />
         AI-Orchestrator
       </a>
 

@@ -1,0 +1,13 @@
+
+> ai-orchestrator-frontend@1.0.0 dev
+> vite --host 0.0.0.0 --port 5173
+
+Port 5173 is in use, trying another one...
+Port 5174 is in use, trying another one...
+
+  VITE v5.4.21  ready in 118 ms
+
+  ➜  Local:   http://localhost:5175/
+  ➜  Network: http://192.168.42.62:5175/
+  ➜  Network: http://192.168.42.61:5175/
+  ➜  Network: http://172.17.0.1:5175/

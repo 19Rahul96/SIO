@@ -5,6 +5,7 @@ import ModeSelector from './inject/ModeSelector'
 import RoleWorkflow from './inject/RoleWorkflow'
 import DirectUpload from './inject/DirectUpload'
 import GraphRAGViewer from '../components/GraphRAGViewer'
+import EDAVisualsViewer from '../components/EDAVisualsViewer'
 
 const TERMINAL_STATUSES = new Set(['completed', 'failed'])
 const PIPELINE_KEYS = ['cleaned', 'chunked', 'entities_extracted', 'graph_built', 'indexed']
@@ -305,6 +306,7 @@ export default function InjectPage() {
   const { fileStatuses, addFile, updateFile, setStep, injectMode } = useStore()
   const [retrying, setRetrying] = useState({})
   const [showGraph, setShowGraph] = useState(false)
+  const [showEdaVisuals, setShowEdaVisuals] = useState(false)
   const [selectedFileForDetails, setSelectedFileForDetails] = useState(null)
   const pollingRef = useRef(null)
 
@@ -350,7 +352,12 @@ export default function InjectPage() {
   }, [addFile, updateFile])
 
   const completed = fileStatuses.filter((f) => f.status === 'completed').length
-  const completedFileIds = fileStatuses.filter((f) => f.status === 'completed').map((f) => f.file_id)
+  const completedFileIds = fileStatuses
+    .filter((f) => f.status === 'completed' && !isDbRecord(f))
+    .map((f) => f.file_id)
+  const completedDbIds = fileStatuses
+    .filter((f) => f.status === 'completed' && isDbRecord(f))
+    .map((f) => f.db_id || f.file_id)
   const total = fileStatuses.length
   const overallPct = total > 0 ? Math.round((completed / total) * 100) : 0
 
@@ -503,12 +510,21 @@ export default function InjectPage() {
                 Entities and relationships extracted. Inspect the knowledge graph before continuing.
               </div>
             </div>
-            <button
-              className="btn btn-teal btn-sm flex-shrink-0"
-              onClick={() => setShowGraph(true)}
-            >
-              🔍 View GraphRAG
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                className="btn btn-sm flex-shrink-0"
+                style={{ color: '#d97706', borderColor: 'rgba(217,119,6,.35)', background: 'rgba(217,119,6,.08)' }}
+                onClick={() => setShowEdaVisuals(true)}
+              >
+                📊 EDA Visuals
+              </button>
+              <button
+                className="btn btn-teal btn-sm flex-shrink-0"
+                onClick={() => setShowGraph(true)}
+              >
+                🔍 View GraphRAG
+              </button>
+            </div>
           </div>
         )}
 
@@ -523,6 +539,14 @@ export default function InjectPage() {
         <GraphRAGViewer
           fileIds={completedFileIds}
           onClose={() => setShowGraph(false)}
+        />
+      )}
+
+      {showEdaVisuals && (
+        <EDAVisualsViewer
+          fileIds={completedFileIds}
+          dbIds={completedDbIds}
+          onClose={() => setShowEdaVisuals(false)}
         />
       )}
 
