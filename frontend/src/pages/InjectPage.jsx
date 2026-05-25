@@ -23,6 +23,21 @@ const EXT_COLORS = {
 
 function getExt(s) { return EXT_COLORS[s?.toUpperCase()] || EXT_COLORS.TXT }
 
+function pct(value, digits = 1) {
+  return `${(Number(value || 0) * 100).toFixed(digits)}%`
+}
+
+function trustBand(highRiskEdgeRatio) {
+  const val = Number(highRiskEdgeRatio || 0)
+  if (val <= 0.1) {
+    return { label: 'High trust', color: '#16a34a', bg: 'rgba(22,163,74,.10)', border: 'rgba(22,163,74,.30)' }
+  }
+  if (val <= 0.25) {
+    return { label: 'Watchlist', color: '#d97706', bg: 'rgba(217,119,6,.10)', border: 'rgba(217,119,6,.30)' }
+  }
+  return { label: 'Low trust', color: '#e11d48', bg: 'rgba(225,29,72,.10)', border: 'rgba(225,29,72,.30)' }
+}
+
 function isDbRecord(file) {
   return (file?.ext || '').toUpperCase() === 'DB' || Boolean(file?.db_id)
 }
@@ -307,6 +322,9 @@ export default function InjectPage() {
   const [retrying, setRetrying] = useState({})
   const [showGraph, setShowGraph] = useState(false)
   const [showEdaVisuals, setShowEdaVisuals] = useState(false)
+  const [graphSummary, setGraphSummary] = useState(null)
+  const [graphSummaryLoading, setGraphSummaryLoading] = useState(false)
+  const [graphSummaryError, setGraphSummaryError] = useState(null)
   const [selectedFileForDetails, setSelectedFileForDetails] = useState(null)
   const pollingRef = useRef(null)
 
@@ -358,8 +376,43 @@ export default function InjectPage() {
   const completedDbIds = fileStatuses
     .filter((f) => f.status === 'completed' && isDbRecord(f))
     .map((f) => f.db_id || f.file_id)
+  const completedGraphIds = [...completedFileIds, ...completedDbIds]
+  const topEntityType = graphSummary?.data_present?.entity_types?.[0]
+  const topRelationType = graphSummary?.data_present?.relationship_types?.[0]
+  const trust = trustBand(graphSummary?.quality?.high_risk_edge_ratio)
   const total = fileStatuses.length
   const overallPct = total > 0 ? Math.round((completed / total) * 100) : 0
+
+  useEffect(() => {
+    if (!completedGraphIds.length) {
+      setGraphSummary(null)
+      setGraphSummaryError(null)
+      setGraphSummaryLoading(false)
+      return
+    }
+
+    let isCancelled = false
+    setGraphSummaryLoading(true)
+    setGraphSummaryError(null)
+
+    api.getGraphSummary(completedGraphIds)
+      .then((summary) => {
+        if (!isCancelled) setGraphSummary(summary)
+      })
+      .catch((e) => {
+        if (!isCancelled) {
+          setGraphSummary(null)
+          setGraphSummaryError(e?.message || 'Unable to load KG summary')
+        }
+      })
+      .finally(() => {
+        if (!isCancelled) setGraphSummaryLoading(false)
+      })
+
+    return () => {
+      isCancelled = true
+    }
+  }, [completedGraphIds.join(',')])
 
   return (
     <div>
@@ -500,15 +553,50 @@ export default function InjectPage() {
 
         <div className="h-6" />
 
-        {completedFileIds.length > 0 && (
+        {completedGraphIds.length > 0 && (
           <div className="mb-4 p-4 bg-teal/5 border border-teal/25 rounded-card flex items-center justify-between">
-            <div>
+            <div className="flex-1 pr-3">
               <div className="text-[12px] font-semibold text-teal">
-                {completed} file{completed > 1 ? 's' : ''} fully processed — GraphRAG ready
+                {completedGraphIds.length} source{completedGraphIds.length > 1 ? 's' : ''} fully processed — GraphRAG ready
               </div>
               <div className="text-[10px] text-t3 mt-0.5">
                 Entities and relationships extracted. Inspect the knowledge graph before continuing.
               </div>
+
+              {graphSummaryLoading && (
+                <div className="text-[10px] text-t3 mt-2">Loading KG summary metrics...</div>
+              )}
+
+              {graphSummaryError && (
+                <div className="text-[10px] text-coral mt-2">KG summary unavailable: {graphSummaryError}</div>
+              )}
+
+              {!graphSummaryLoading && !graphSummaryError && graphSummary && (
+                <div className="mt-2.5 grid grid-cols-2 md:grid-cols-5 gap-2">
+                  <div className="px-2 py-1.5 bg-bg3 border border-dborder rounded-sm">
+                    <div className="text-[9px] text-t3 uppercase tracking-wider">Nodes</div>
+                    <div className="text-[12px] font-semibold text-t1">{graphSummary.counts?.nodes ?? 0}</div>
+                  </div>
+                  <div className="px-2 py-1.5 bg-bg3 border border-dborder rounded-sm">
+                    <div className="text-[9px] text-t3 uppercase tracking-wider">Edges</div>
+                    <div className="text-[12px] font-semibold text-t1">{graphSummary.counts?.edges ?? 0}</div>
+                  </div>
+                  <div className="px-2 py-1.5 bg-bg3 border border-dborder rounded-sm">
+                    <div className="text-[9px] text-t3 uppercase tracking-wider">Top Entity</div>
+                    <div className="text-[12px] font-semibold text-t1 truncate">{topEntityType ? `${topEntityType.name} (${topEntityType.percentage}%)` : '—'}</div>
+                  </div>
+                  <div className="px-2 py-1.5 bg-bg3 border border-dborder rounded-sm">
+                    <div className="text-[9px] text-t3 uppercase tracking-wider">Top Relation</div>
+                    <div className="text-[12px] font-semibold text-t1 truncate">{topRelationType ? `${topRelationType.name} (${topRelationType.percentage}%)` : '—'}</div>
+                  </div>
+                  <div className="px-2 py-1.5 rounded-sm border" style={{ background: trust.bg, borderColor: trust.border }}>
+                    <div className="text-[9px] uppercase tracking-wider" style={{ color: trust.color }}>Trust</div>
+                    <div className="text-[12px] font-semibold" style={{ color: trust.color }}>
+                      {trust.label} · {pct(graphSummary.quality?.high_risk_edge_ratio, 1)} high-risk
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -537,7 +625,7 @@ export default function InjectPage() {
 
       {showGraph && (
         <GraphRAGViewer
-          fileIds={completedFileIds}
+          fileIds={completedGraphIds}
           onClose={() => setShowGraph(false)}
         />
       )}

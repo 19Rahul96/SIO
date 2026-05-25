@@ -1082,6 +1082,12 @@ async def graph_canonical(file_ids: Optional[str] = Query(None)):
     return graph_builder.get_canonical_graph(fids)
 
 
+@app.get("/graph/summary")
+async def graph_summary(file_ids: Optional[str] = Query(None)):
+    fids = [f for f in (file_ids or "").split(",") if f] or None
+    return graph_builder.get_graph_summary(fids)
+
+
 @app.get("/wiki/pages")
 async def wiki_pages(
     q: Optional[str] = Query(None),

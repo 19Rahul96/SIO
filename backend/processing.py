@@ -633,7 +633,7 @@ def process_file_pipeline(file_id: str, file_path: str, ext: str, embedding_stor
             version="1.0",
         )
         with open(f"{PROCESSED_DIR}/{file_id}_ml_metrics.json", "w") as f:
-            f.write(metrics_artifact.json(indent=2))
+            f.write(metrics_artifact.model_dump_json(indent=2))
         logger.info(f"Pipeline complete: {file_id}")
 
     except Exception as e:

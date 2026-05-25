@@ -76,6 +76,11 @@ const api = {
     return req(`/graph-canonical${qs}`)
   },
 
+  getGraphSummary: (fileIds = []) => {
+    const qs = fileIds.length ? `?file_ids=${fileIds.join(',')}` : ''
+    return req(`/graph/summary${qs}`)
+  },
+
   getWikiPages: ({ q = '', fileIds = [], limit = 100 } = {}) => {
     const params = new URLSearchParams()
     if (q) params.set('q', q)

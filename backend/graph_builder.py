@@ -1,7 +1,9 @@
 import json
 import os
 import logging
-from typing import List, Dict, Optional, Callable
+from collections import Counter
+import time
+from typing import Any, List, Dict, Optional, Callable
 import re
 
 import numpy as np
@@ -381,6 +383,231 @@ class GraphBuilder:
                 "high": high_conf,
             },
             "stats": self._graph_stats(len(nodes), len(active_edges)),
+        }
+
+    @staticmethod
+    def _top_distribution(counter: Counter, total: int, limit: int = 5) -> List[Dict[str, Any]]:
+        rows: List[Dict[str, Any]] = []
+        for name, count in counter.most_common(limit):
+            pct = (count / max(1, total)) * 100
+            rows.append({
+                "name": name,
+                "count": int(count),
+                "percentage": round(pct, 2),
+            })
+        return rows
+
+    @staticmethod
+    def _extractor_distribution(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        extractor_counts: Counter = Counter()
+        for rec in records:
+            provenance = rec.get("provenance") or []
+            if not isinstance(provenance, list):
+                continue
+            for item in provenance:
+                if isinstance(item, dict):
+                    key = str(item.get("extractor") or item.get("source") or "unknown").strip() or "unknown"
+                else:
+                    key = "unknown"
+                extractor_counts[key.lower()] += 1
+
+        total = sum(extractor_counts.values())
+        rows: List[Dict[str, Any]] = []
+        for name, count in extractor_counts.most_common(5):
+            rows.append({
+                "name": name,
+                "count": int(count),
+                "percentage": round((count / max(1, total)) * 100, 2),
+            })
+        return rows
+
+    @staticmethod
+    def _edge_quality(active_edges: List[Dict[str, Any]], all_edges: List[Dict[str, Any]]) -> Dict[str, Any]:
+        low_conf = 0
+        medium_conf = 0
+        high_conf = 0
+        contradictory = 0
+        confidence_present = 0
+        provenance_present = 0
+
+        for edge in active_edges:
+            conf_raw = edge.get("confidence")
+            if conf_raw is not None:
+                confidence_present += 1
+            conf = float(conf_raw or 0.0)
+            if conf < 0.5:
+                low_conf += 1
+            elif conf < 0.8:
+                medium_conf += 1
+            else:
+                high_conf += 1
+
+            relation = str(edge.get("relation", "")).lower()
+            if any(tok in relation for tok in ["contradict", "ambiguous", "conflict", "inconsistent"]):
+                contradictory += 1
+
+            if edge.get("provenance"):
+                provenance_present += 1
+
+        suppressed_edges = [e for e in all_edges if e.get("suppressed")]
+
+        return {
+            "edge_confidence_distribution": {
+                "low": low_conf,
+                "medium": medium_conf,
+                "high": high_conf,
+            },
+            "high_risk_edge_ratio": round(low_conf / max(1, len(active_edges)), 4),
+            "contradiction_ratio": round(contradictory / max(1, len(active_edges)), 4),
+            "suppressed_edge_count": len(suppressed_edges),
+            "confidence_present_ratio": round(confidence_present / max(1, len(active_edges)), 4),
+            "provenance_present_ratio": round(provenance_present / max(1, len(active_edges)), 4),
+        }
+
+    def get_graph_summary(self, file_ids: Optional[List[str]] = None) -> Dict[str, Any]:
+        scope_ids = [fid for fid in (file_ids or []) if fid]
+        scope_set = set(scope_ids)
+
+        canonical = self._load_canonical_graph()
+        canonical_nodes = canonical.get("nodes", [])
+        canonical_edges = canonical.get("edges", [])
+
+        if scope_set:
+            scoped_nodes = []
+            keep_ids = set()
+            for node in canonical_nodes:
+                source_files = set(node.get("source_files", []))
+                if source_files & scope_set:
+                    scoped_nodes.append(node)
+                    keep_ids.add(node.get("canonical_id"))
+
+            scoped_edges = []
+            for edge in canonical_edges:
+                src = edge.get("source_canonical_id")
+                tgt = edge.get("target_canonical_id")
+                source_files = set(edge.get("source_files", []))
+                if src in keep_ids and tgt in keep_ids and source_files & scope_set:
+                    scoped_edges.append(edge)
+        else:
+            scoped_nodes = list(canonical_nodes)
+            scoped_edges = list(canonical_edges)
+
+        active_edges = [e for e in scoped_edges if not e.get("suppressed")]
+        graph_scope = "canonical"
+        canonicalization_applied = True
+
+        # Fallback mode when canonical artifacts are not available for requested scope.
+        if not scoped_nodes and not scoped_edges:
+            fallback_graph = self.get_graph(scope_ids or None)
+            fallback_nodes = fallback_graph.get("nodes", [])
+            fallback_edges = fallback_graph.get("edges", [])
+            if fallback_nodes or fallback_edges:
+                graph_scope = "fallback_raw"
+                canonicalization_applied = False
+                scoped_nodes = fallback_nodes
+                scoped_edges = fallback_edges
+                active_edges = fallback_edges
+
+        node_count = len(scoped_nodes)
+        edge_count = len(active_edges)
+        stats = self._graph_stats(node_count, edge_count)
+
+        entity_type_counter: Counter = Counter()
+        rel_type_counter: Counter = Counter()
+        source_files = set()
+        multi_source_nodes = 0
+
+        for node in scoped_nodes:
+            t = str(node.get("entity_type") or node.get("type") or "entity").lower()
+            entity_type_counter[t] += 1
+
+            if graph_scope == "canonical":
+                node_sources = set(node.get("source_files", []))
+            else:
+                node_sources = {node.get("file_id")} if node.get("file_id") else set()
+            source_files |= {s for s in node_sources if s}
+            if len(node_sources) > 1:
+                multi_source_nodes += 1
+
+        for edge in active_edges:
+            rel = str(edge.get("relation") or "related_to").lower()
+            rel_type_counter[rel] += 1
+            if graph_scope == "canonical":
+                source_files |= {s for s in edge.get("source_files", []) if s}
+            elif edge.get("file_id"):
+                source_files.add(edge.get("file_id"))
+
+        quality = self._edge_quality(active_edges, scoped_edges)
+        extractors = self._extractor_distribution(scoped_nodes + active_edges)
+
+        coverage_rows = []
+        if graph_scope == "canonical":
+            by_source: Dict[str, Dict[str, int]] = {}
+            for node in scoped_nodes:
+                for fid in node.get("source_files", []):
+                    by_source.setdefault(fid, {"nodes": 0, "edges": 0})["nodes"] += 1
+            for edge in active_edges:
+                for fid in edge.get("source_files", []):
+                    by_source.setdefault(fid, {"nodes": 0, "edges": 0})["edges"] += 1
+            coverage_rows = [
+                {"source_id": fid, "node_count": vals["nodes"], "edge_count": vals["edges"]}
+                for fid, vals in sorted(by_source.items(), key=lambda x: (x[1]["nodes"] + x[1]["edges"]), reverse=True)
+            ][:10]
+
+        caveats: List[str] = []
+        if node_count == 0 and edge_count == 0:
+            caveats.append("No graph artifacts are available yet for the selected scope.")
+        if quality["provenance_present_ratio"] < 0.4 and edge_count > 0:
+            caveats.append("Many edges have limited provenance, so relationship traceability is partial.")
+        if quality["confidence_present_ratio"] < 0.6 and edge_count > 0:
+            caveats.append("Confidence values are sparse for part of the graph; treat low-confidence regions carefully.")
+        if quality["high_risk_edge_ratio"] > 0.25 and edge_count > 0:
+            caveats.append("A notable share of edges are low confidence and may require manual review.")
+        if graph_scope == "fallback_raw":
+            caveats.append("Canonical graph was unavailable for this scope; summary is based on raw per-source graph data.")
+
+        generated_at = canonical.get("updated_at") or time.time()
+
+        return {
+            "graph_scope": graph_scope,
+            "generated_at": generated_at,
+            "counts": {
+                "nodes": stats.get("node_count", 0),
+                "edges": stats.get("edge_count", 0),
+                "density": stats.get("density", 0.0),
+                "avg_degree": stats.get("avg_degree", 0.0),
+            },
+            "data_present": {
+                "source_files_count": len(source_files),
+                "entity_types": self._top_distribution(entity_type_counter, node_count, limit=5),
+                "relationship_types": self._top_distribution(rel_type_counter, edge_count, limit=5),
+                "multi_source_entity_ratio": round(multi_source_nodes / max(1, node_count), 4),
+            },
+            "generation": {
+                "pipeline_steps": [
+                    "Ingest",
+                    "Chunk",
+                    "Extract entities/relations",
+                    "Canonicalize",
+                    "Resolve entities",
+                    "Merge graph",
+                    "Index for retrieval",
+                ],
+                "pipeline_string": "Ingest -> Chunk -> Extract entities/relations -> Canonicalize -> Resolve entities -> Merge graph -> Index for retrieval",
+                "extractors": extractors,
+                "canonicalization_applied": canonicalization_applied,
+            },
+            "quality": {
+                "edge_confidence_distribution": quality["edge_confidence_distribution"],
+                "high_risk_edge_ratio": quality["high_risk_edge_ratio"],
+                "contradiction_ratio": quality["contradiction_ratio"],
+                "suppressed_edge_count": quality["suppressed_edge_count"],
+            },
+            "source_coverage": {
+                "source_files_count": len(source_files),
+                "covered_sources": coverage_rows,
+            },
+            "caveats": caveats,
         }
 
     def get_canonical_graph(self, file_ids: Optional[List[str]] = None) -> Dict:

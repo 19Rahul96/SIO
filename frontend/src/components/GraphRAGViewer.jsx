@@ -171,20 +171,38 @@ function buildGraphCanvas(graph, maxNodes = 80) {
   return { width, height, nodes: placedNodes, edges: selectedEdges, pos, totalNodes: graph.nodes.length, totalEdges: graph.edges.length }
 }
 
+function pct(value, digits = 1) {
+  return `${(Number(value || 0) * 100).toFixed(digits)}%`
+}
+
+function toneForRisk(value) {
+  const n = Number(value || 0)
+  if (n <= 0.1) return { color: '#16a34a', label: 'Low risk' }
+  if (n <= 0.25) return { color: '#d97706', label: 'Moderate risk' }
+  return { color: '#e11d48', label: 'High risk' }
+}
+
 export default function GraphRAGViewer({ fileIds = [], onClose }) {
   const [graph, setGraph] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [tab, setTab] = useState('graph') // graph | stats | nodes | edges
+  const [summary, setSummary] = useState(null)
+  const [summaryLoading, setSummaryLoading] = useState(true)
+  const [summaryError, setSummaryError] = useState(null)
+  const [tab, setTab] = useState('summary') // summary | graph | stats | nodes | edges
 
   useEffect(() => {
     if (!fileIds.length) {
       setGraph({ nodes: [], edges: [], stats: { node_count: 0, edge_count: 0, density: 0 } })
+      setSummary(null)
       setLoading(false)
+      setSummaryLoading(false)
       return
     }
 
     setLoading(true)
+    setSummaryLoading(true)
+    setSummaryError(null)
     api.getCanonicalGraph(fileIds)
       .then((canonical) => {
         if ((canonical?.nodes?.length || 0) > 0 || (canonical?.edges?.length || 0) > 0) {
@@ -196,6 +214,11 @@ export default function GraphRAGViewer({ fileIds = [], onClose }) {
       .then(setGraph)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
+
+    api.getGraphSummary(fileIds)
+      .then(setSummary)
+      .catch((e) => setSummaryError(e.message))
+      .finally(() => setSummaryLoading(false))
   }, [fileIds.join(',')])
 
   const density = graph
@@ -203,6 +226,13 @@ export default function GraphRAGViewer({ fileIds = [], onClose }) {
       ? (graph.stats.edge_count / (graph.stats.node_count * (graph.stats.node_count - 1))).toFixed(4)
       : '—'
     : '—'
+
+  const nodeLabelById = {}
+  if (graph?.nodes?.length) {
+    graph.nodes.forEach((n) => {
+      nodeLabelById[n.id] = n.label || n.id
+    })
+  }
 
   return (
     <div
@@ -233,7 +263,7 @@ export default function GraphRAGViewer({ fileIds = [], onClose }) {
 
         {/* Tabs */}
         <div className="flex gap-0 border-b border-dborder flex-shrink-0">
-          {[['graph', 'Knowledge Graph'], ['stats', 'Graph Stats'], ['nodes', `Nodes${graph ? ` (${graph.stats.node_count})` : ''}`], ['edges', `Edges${graph ? ` (${graph.stats.edge_count})` : ''}`]].map(([key, label]) => (
+          {[['summary', 'KG Summary'], ['graph', 'Knowledge Graph'], ['nodes', `Nodes${graph ? ` (${graph.stats.node_count})` : ''}`], ['edges', `Edges${graph ? ` (${graph.stats.edge_count})` : ''}`]].map(([key, label]) => (
             <button
               key={key}
               onClick={() => setTab(key)}
@@ -262,6 +292,151 @@ export default function GraphRAGViewer({ fileIds = [], onClose }) {
           )}
           {!loading && !error && graph && (
             <>
+              {tab === 'summary' && (
+                <div>
+                  {!fileIds.length ? (
+                    <p className="text-t3 text-[12px] text-center py-10">No completed sources are selected yet.</p>
+                  ) : summaryLoading ? (
+                    <div className="text-[12px] text-t3 text-center py-10">Loading KG summary...</div>
+                  ) : summaryError ? (
+                    <div className="text-[12px] text-coral text-center py-10">Failed to load summary: {summaryError}</div>
+                  ) : !summary ? (
+                    <div className="text-[12px] text-t3 text-center py-10">Summary is not available for this graph yet.</div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-4 gap-3">
+                        <div className="card text-center py-4">
+                          <div className="font-sora text-2xl font-bold text-accent">{summary.counts?.nodes ?? 0}</div>
+                          <div className="text-[10px] text-t3 mt-1 uppercase tracking-widest">Nodes</div>
+                        </div>
+                        <div className="card text-center py-4">
+                          <div className="font-sora text-2xl font-bold" style={{ color: '#0d9488' }}>{summary.counts?.edges ?? 0}</div>
+                          <div className="text-[10px] text-t3 mt-1 uppercase tracking-widest">Edges</div>
+                        </div>
+                        <div className="card text-center py-4">
+                          <div className="font-sora text-2xl font-bold" style={{ color: '#d97706' }}>{summary.counts?.density ?? 0}</div>
+                          <div className="text-[10px] text-t3 mt-1 uppercase tracking-widest">Density</div>
+                        </div>
+                        <div className="card text-center py-4">
+                          <div className="font-sora text-2xl font-bold" style={{ color: '#7c3aed' }}>{summary.data_present?.source_files_count ?? 0}</div>
+                          <div className="text-[10px] text-t3 mt-1 uppercase tracking-widest">Sources</div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="card">
+                          <div className="text-[12px] font-semibold text-t1 mb-2">Data Present</div>
+                          <div className="text-[11px] text-t2 space-y-1">
+                            <div>Source files represented: <span className="font-semibold text-t1">{summary.data_present?.source_files_count ?? 0}</span></div>
+                            <div>Multi-source entity share: <span className="font-semibold text-t1">{pct(summary.data_present?.multi_source_entity_ratio ?? 0, 2)}</span></div>
+                            <div>Entity families tracked: <span className="font-semibold text-t1">{(summary.data_present?.entity_types || []).length}</span></div>
+                            <div>Relationship families tracked: <span className="font-semibold text-t1">{(summary.data_present?.relationship_types || []).length}</span></div>
+                          </div>
+                        </div>
+                        <div className="card">
+                          <div className="text-[12px] font-semibold text-t1 mb-2">KG Size and Structure</div>
+                          <div className="text-[11px] text-t2 space-y-1">
+                            <div>Total nodes: <span className="font-semibold text-t1">{summary.counts?.nodes ?? 0}</span></div>
+                            <div>Total edges: <span className="font-semibold text-t1">{summary.counts?.edges ?? 0}</span></div>
+                            <div>Density: <span className="font-semibold text-t1">{summary.counts?.density ?? 0}</span></div>
+                            <div>Average degree: <span className="font-semibold text-t1">{summary.counts?.avg_degree ?? 0}</span></div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="card">
+                          <div className="text-[12px] font-semibold text-t1 mb-2">Top 5 Entity Types</div>
+                          {(summary.data_present?.entity_types || []).length === 0 ? (
+                            <div className="text-[11px] text-t3">No entity type data available.</div>
+                          ) : (
+                            (summary.data_present?.entity_types || []).map((row) => (
+                              <div key={row.name} className="mb-2">
+                                <div className="flex justify-between text-[11px] text-t2 mb-1">
+                                  <span>{row.name}</span>
+                                  <span>{row.count} ({row.percentage}%)</span>
+                                </div>
+                                <div className="prog-bar"><div className="prog-fill" style={{ width: `${Math.min(100, Number(row.percentage || 0))}%` }} /></div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                        <div className="card">
+                          <div className="text-[12px] font-semibold text-t1 mb-2">Top 5 Relationship Types</div>
+                          {(summary.data_present?.relationship_types || []).length === 0 ? (
+                            <div className="text-[11px] text-t3">No relationship type data available.</div>
+                          ) : (
+                            (summary.data_present?.relationship_types || []).map((row) => (
+                              <div key={row.name} className="mb-2">
+                                <div className="flex justify-between text-[11px] text-t2 mb-1">
+                                  <span>{row.name}</span>
+                                  <span>{row.count} ({row.percentage}%)</span>
+                                </div>
+                                <div className="prog-bar"><div className="prog-fill" style={{ width: `${Math.min(100, Number(row.percentage || 0))}%`, background: '#0d9488' }} /></div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="card">
+                          <div className="text-[12px] font-semibold text-t1 mb-2">How This KG Was Generated</div>
+                          <div className="text-[11px] text-t2 mb-2">{summary.generation?.pipeline_string || 'Pipeline metadata unavailable.'}</div>
+                          <div className="flex flex-wrap gap-1.5 mb-2">
+                            {(summary.generation?.pipeline_steps || []).map((step) => (
+                              <span key={step} className="apill apill-done">{step}</span>
+                            ))}
+                          </div>
+                          <div className="text-[10px] text-t3 uppercase tracking-wider mb-1">Extractor mix</div>
+                          {(summary.generation?.extractors || []).length === 0 ? (
+                            <div className="text-[11px] text-t3">No extractor provenance available.</div>
+                          ) : (
+                            <div className="space-y-1">
+                              {(summary.generation?.extractors || []).map((row) => (
+                                <div key={row.name} className="flex justify-between text-[11px] text-t2">
+                                  <span>{row.name}</span>
+                                  <span>{row.count} ({row.percentage}%)</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="card">
+                          <div className="text-[12px] font-semibold text-t1 mb-2">Trust and Caveats</div>
+                          <div className="grid grid-cols-2 gap-2 mb-2">
+                            <div className="mcard">
+                              <div className="text-[10px] text-t3 uppercase tracking-wider mb-1">High-risk edges</div>
+                              <div className="font-sora text-[18px] font-bold text-t1">{pct(summary.quality?.high_risk_edge_ratio ?? 0, 2)}</div>
+                            </div>
+                            <div className="mcard">
+                              <div className="text-[10px] text-t3 uppercase tracking-wider mb-1">Contradictions</div>
+                              <div className="font-sora text-[18px] font-bold text-t1">{pct(summary.quality?.contradiction_ratio ?? 0, 2)}</div>
+                            </div>
+                          </div>
+                          <div className="text-[11px] text-t2 mb-2">
+                            Confidence bands: low {summary.quality?.edge_confidence_distribution?.low ?? 0}, medium {summary.quality?.edge_confidence_distribution?.medium ?? 0}, high {summary.quality?.edge_confidence_distribution?.high ?? 0}
+                          </div>
+                          <div className="text-[11px] text-t2 mb-2">Suppressed edge count: <span className="font-semibold text-t1">{summary.quality?.suppressed_edge_count ?? 0}</span></div>
+                          <div className="text-[11px]" style={{ color: toneForRisk(summary.quality?.high_risk_edge_ratio).color }}>
+                            {toneForRisk(summary.quality?.high_risk_edge_ratio).label}
+                          </div>
+                          {(summary.caveats || []).length > 0 && (
+                            <div className="mt-2 text-[11px] text-coral space-y-1">
+                              {(summary.caveats || []).map((note, idx) => (
+                                <div key={idx}>• {note}</div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                    </div>
+                  )}
+                </div>
+              )}
+
               {tab === 'graph' && (
                 <div>
                   {!fileIds.length ? (
@@ -340,77 +515,6 @@ export default function GraphRAGViewer({ fileIds = [], onClose }) {
                 </div>
               )}
 
-              {tab === 'stats' && (
-                <div className="space-y-5">
-                  {/* Stat cards */}
-                  <div className="grid grid-cols-4 gap-3">
-                    {[
-                      { label: 'Nodes', value: graph.stats.node_count, color: '#4f46e5' },
-                      { label: 'Edges', value: graph.stats.edge_count, color: '#0d9488' },
-                      { label: 'Graph Density', value: graph.stats.density ?? density, color: '#d97706' },
-                      { label: 'Files', value: fileIds.length || '—', color: '#7c3aed' },
-                    ].map((s) => (
-                      <div key={s.label} className="card text-center py-5">
-                        <div className="font-sora text-2xl font-bold" style={{ color: s.color }}>{s.value}</div>
-                        <div className="text-[10px] text-t3 mt-1 uppercase tracking-widest">{s.label}</div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Entity type breakdown */}
-                  <div>
-                    <div className="sect">Entity type breakdown</div>
-                    {(() => {
-                      const counts = {}
-                      graph.nodes.forEach((n) => {
-                        const t = n.entity_type || n.type || 'ENTITY'
-                        counts[t] = (counts[t] || 0) + 1
-                      })
-                      const total = graph.nodes.length || 1
-                      return Object.entries(counts)
-                        .sort((a, b) => b[1] - a[1])
-                        .map(([type, count]) => (
-                          <div key={type} className="mb-2">
-                            <div className="flex justify-between text-[11px] text-t2 mb-1">
-                              <span>{type}</span>
-                              <span>{count} ({Math.round(count / total * 100)}%)</span>
-                            </div>
-                            <div className="prog-bar">
-                              <div className="prog-fill" style={{ width: `${count / total * 100}%` }} />
-                            </div>
-                          </div>
-                        ))
-                    })()}
-                  </div>
-
-                  {/* Relation type breakdown */}
-                  <div>
-                    <div className="sect">Relationship type breakdown</div>
-                    {(() => {
-                      const counts = {}
-                      graph.edges.forEach((e) => {
-                        const r = e.relation || 'related_to'
-                        counts[r] = (counts[r] || 0) + 1
-                      })
-                      const total = graph.edges.length || 1
-                      return Object.entries(counts)
-                        .sort((a, b) => b[1] - a[1])
-                        .slice(0, 10)
-                        .map(([rel, count]) => (
-                          <div key={rel} className="mb-2">
-                            <div className="flex justify-between text-[11px] text-t2 mb-1">
-                              <span>{rel}</span><span>{count}</span>
-                            </div>
-                            <div className="prog-bar">
-                              <div className="prog-fill" style={{ width: `${count / total * 100}%`, background: '#0d9488' }} />
-                            </div>
-                          </div>
-                        ))
-                    })()}
-                  </div>
-                </div>
-              )}
-
               {tab === 'nodes' && (
                 <div>
                   {graph.nodes.length === 0 ? (
@@ -419,16 +523,13 @@ export default function GraphRAGViewer({ fileIds = [], onClose }) {
                     <div className="space-y-1.5">
                       {graph.nodes.map((n) => (
                         <div key={n.id} className="flex items-center gap-2.5 px-3 py-2 bg-bg3 border border-dborder rounded-sm">
-                          <span className="text-[10px] font-mono text-t3 w-16 flex-shrink-0">{n.id}</span>
+                          <span className="text-[10px] text-t3 w-16 flex-shrink-0">Entity</span>
                           <span className="text-[12px] text-t1 font-medium flex-1 truncate">{n.label}</span>
                           {typeChip(n.entity_type || n.type)}
                           {n.chunk_idx != null && (
                             <span className="text-[9px] font-mono px-1.5 py-0.5 rounded" style={{ background: 'rgba(79,70,229,.10)', color: '#4f46e5', border: '1px solid rgba(79,70,229,.25)', flexShrink: 0 }}>
                               chunk {n.chunk_idx}
                             </span>
-                          )}
-                          {n.file_id && (
-                            <span className="text-[9px] text-t3 font-mono flex-shrink-0">{n.file_id.slice(0, 8)}…</span>
                           )}
                         </div>
                       ))}
@@ -446,18 +547,15 @@ export default function GraphRAGViewer({ fileIds = [], onClose }) {
                       {graph.edges.map((e, i) => (
                         <div key={i} className="px-3 py-2 bg-bg3 border border-dborder rounded-sm">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-[11px] font-medium text-t1">{e.source}</span>
+                            <span className="text-[11px] font-medium text-t1">{nodeLabelById[e.source] || e.source}</span>
                             <span className="text-[9px] px-2 py-0.5 rounded-md font-semibold" style={{ background: 'rgba(13,148,136,.12)', color: '#0d9488', border: '1px solid rgba(13,148,136,.3)' }}>
                               {e.relation}
                             </span>
-                            <span className="text-[11px] font-medium text-t1">{e.target}</span>
+                            <span className="text-[11px] font-medium text-t1">{nodeLabelById[e.target] || e.target}</span>
                             {e.chunk_idx != null && (
                               <span className="text-[9px] font-mono px-1.5 py-0.5 rounded" style={{ background: 'rgba(79,70,229,.10)', color: '#4f46e5', border: '1px solid rgba(79,70,229,.25)', marginLeft: 'auto', flexShrink: 0 }}>
                                 chunk {e.chunk_idx}
                               </span>
-                            )}
-                            {e.file_id && (
-                              <span className="text-[9px] text-t3 font-mono flex-shrink-0">{e.file_id.slice(0, 8)}…</span>
                             )}
                           </div>
                           {e.context && (
