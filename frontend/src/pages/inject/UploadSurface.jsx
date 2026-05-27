@@ -10,15 +10,24 @@ export default function UploadSurface({
   allowFolder = false,
   helperText,
 }) {
-  const { addFile } = useStore()
+  const { addFile, setError } = useStore()
   const fileInput = useRef(null)
   const folderInput = useRef(null)
   const [scrapeUrl, setScrapeUrl] = useState('')
   const [scraping, setScraping] = useState(false)
   const [uploadWarnings, setUploadWarnings] = useState([])
 
+  const describeError = (err, fallback) => {
+    if (!err) return fallback
+    if (typeof err.detail === 'string') return err.detail
+    if (err.detail?.message) return err.detail.message
+    if (err.message) return err.message
+    return fallback
+  }
+
   const handleFiles = useCallback(
     async (fileList) => {
+      setError(null)
       for (const file of Array.from(fileList || [])) {
         try {
           const res = await api.upload(file, uploadContext)
@@ -87,12 +96,22 @@ export default function UploadSurface({
               ])
             }
           } else {
-            console.error('Upload failed', e)
+            const message = describeError(e, 'Upload failed')
+            setError(`Upload failed for ${file.name}: ${message}`)
+            setUploadWarnings((w) => [
+              ...w,
+              {
+                filename: file.name,
+                message,
+                original_file_id: null,
+                original_filename: null,
+              },
+            ])
           }
         }
       }
     },
-    [addFile, uploadContext],
+    [addFile, setError, uploadContext],
   )
 
   const handleDrop = (e) => {
@@ -102,6 +121,7 @@ export default function UploadSurface({
 
   const handleScrape = async () => {
     if (!scrapeUrl.trim()) return
+    setError(null)
     setScraping(true)
     try {
       const res = await api.scrape(scrapeUrl.trim(), uploadContext)
@@ -161,10 +181,30 @@ export default function UploadSurface({
           ])
           setScrapeUrl('')
         } catch (forceErr) {
-          alert('Force scrape failed: ' + (forceErr.message || 'unknown error'))
+          const message = describeError(forceErr, 'unknown error')
+          setError(`Force scrape failed: ${message}`)
+          setUploadWarnings((w) => [
+            ...w,
+            {
+              filename: 'URL scrape',
+              message: `Force scrape failed: ${message}`,
+              original_file_id: e.detail?.original_file_id || null,
+              original_filename: e.detail?.original_filename || null,
+            },
+          ])
         }
       } else {
-        alert('Scrape failed: ' + e.message)
+        const message = describeError(e, 'Scrape failed')
+        setError(`Scrape failed: ${message}`)
+        setUploadWarnings((w) => [
+          ...w,
+          {
+            filename: 'URL scrape',
+            message,
+            original_file_id: null,
+            original_filename: null,
+          },
+        ])
       }
     } finally {
       setScraping(false)

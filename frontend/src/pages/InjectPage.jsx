@@ -6,6 +6,7 @@ import RoleWorkflow from './inject/RoleWorkflow'
 import DirectUpload from './inject/DirectUpload'
 import GraphRAGViewer from '../components/GraphRAGViewer'
 import EDAVisualsViewer from '../components/EDAVisualsViewer'
+import EDAVisualsViewer2 from '../components/EDAVisualsViewer2'
 
 const TERMINAL_STATUSES = new Set(['completed', 'failed'])
 const PIPELINE_KEYS = ['cleaned', 'chunked', 'entities_extracted', 'graph_built', 'indexed']
@@ -322,6 +323,7 @@ export default function InjectPage() {
   const [retrying, setRetrying] = useState({})
   const [showGraph, setShowGraph] = useState(false)
   const [showEdaVisuals, setShowEdaVisuals] = useState(false)
+  const [showEdaVisuals2, setShowEdaVisuals2] = useState(false)
   const [graphSummary, setGraphSummary] = useState(null)
   const [graphSummaryLoading, setGraphSummaryLoading] = useState(false)
   const [graphSummaryError, setGraphSummaryError] = useState(null)
@@ -607,6 +609,13 @@ export default function InjectPage() {
                 📊 EDA Visuals
               </button>
               <button
+                className="btn btn-sm flex-shrink-0"
+                style={{ color: '#d97706', borderColor: 'rgba(217,119,6,.35)', background: 'rgba(217,119,6,.08)' }}
+                onClick={() => setShowEdaVisuals2(true)}
+              >
+                📈 EDA Visuals2
+              </button>
+              <button
                 className="btn btn-teal btn-sm flex-shrink-0"
                 onClick={() => setShowGraph(true)}
               >
@@ -635,6 +644,15 @@ export default function InjectPage() {
           fileIds={completedFileIds}
           dbIds={completedDbIds}
           onClose={() => setShowEdaVisuals(false)}
+        />
+      )}
+
+      {showEdaVisuals2 && (
+        <EDAVisualsViewer2
+          fileIds={completedFileIds}
+          dbIds={completedDbIds}
+          onOpenGraph={() => setShowGraph(true)}
+          onClose={() => setShowEdaVisuals2(false)}
         />
       )}
 

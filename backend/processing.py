@@ -159,6 +159,216 @@ def _read_json(path: str) -> Dict:
     return {}
 
 
+def _safe_float(value, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except Exception:
+        return default
+
+
+def _safe_int(value, default: int = 0) -> int:
+    try:
+        return int(value)
+    except Exception:
+        return default
+
+
+def _build_file_phase1_blocks(status: Dict, summary: Dict, scorecard: Dict, visuals: Dict) -> Dict:
+    chunk_report = status.get("chunk_validation_report", {}) or {}
+    corpus_profile = status.get("corpus_profile", {}) or {}
+    entity_stats = summary.get("entity_statistics", {}) or {}
+    rel_stats = summary.get("relationship_statistics", {}) or {}
+    semantic = summary.get("semantic_quality_metrics", {}) or {}
+    graph_metrics = summary.get("graph_metrics", {}) or {}
+    runtime_ms = _safe_int(summary.get("runtime_ms", 0))
+
+    text_blocks = _safe_int(corpus_profile.get("text_block_count", 0))
+    table_rows = _safe_int(corpus_profile.get("table_row_count", 0))
+    total_records = max(text_blocks, table_rows)
+    total_columns = _safe_int(entity_stats.get("type_count", 0))
+    missing_pct = max(0.0, min(100.0, 100.0 - _safe_float(chunk_report.get("coverage_pct", 0.0))))
+    duplicate_rows = _safe_int(entity_stats.get("duplicate_entity_count", 0))
+    anomaly_count = _safe_int(semantic.get("numeric_anomaly_count", 0)) + _safe_int(semantic.get("ontology_violation_count", 0))
+    file_size = _safe_int(status.get("size", 0))
+    entities_extracted = _safe_int(entity_stats.get("entity_count", 0))
+    relationships_extracted = _safe_int(rel_stats.get("relationship_count", 0))
+    schema_drift_count = _safe_int(semantic.get("type_conflict_count", 0))
+    orphan_relationships = _safe_int(entity_stats.get("orphan_count", 0))
+    timestamp_coverage = _safe_float(semantic.get("temporal_consistency_score", 0.0)) * 100.0
+
+    completeness = max(0.0, min(1.0, _safe_float(scorecard.get("completeness_score", 0.0))))
+    consistency = max(0.0, min(1.0, _safe_float(semantic.get("consistency_score", 0.0))))
+    uniqueness = max(0.0, min(1.0, 1.0 - min(1.0, _safe_float(duplicate_rows) / max(1.0, _safe_float(entities_extracted)))) )
+    validity = max(0.0, min(1.0, 1.0 - _safe_float(semantic.get("numeric_anomaly_ratio", 0.0))))
+    anomaly_ratio = min(1.0, _safe_float(anomaly_count) / max(1.0, _safe_float(relationships_extracted + entities_extracted)))
+    health_score = max(
+        0.0,
+        min(
+            1.0,
+            (0.30 * completeness)
+            + (0.22 * consistency)
+            + (0.20 * uniqueness)
+            + (0.18 * validity)
+            + (0.10 * (1.0 - anomaly_ratio)),
+        ),
+    )
+
+    capabilities = {
+        "supports_time_series": bool((summary.get("pdf_specific_eda") or {}).get("date_like_tokens_detected", False)),
+        "supports_correlation": False,
+        "supports_kg_metrics": True,
+        "supports_feature_importance": False,
+    }
+
+    core_kpis = {
+        "total_records": total_records,
+        "total_columns": total_columns,
+        "missing_pct": round(missing_pct, 2),
+        "duplicate_rows": duplicate_rows,
+        "anomaly_count": anomaly_count,
+        "file_size": file_size,
+        "entities_extracted": entities_extracted,
+        "relationships_extracted": relationships_extracted,
+        "schema_drift_count": schema_drift_count,
+        "orphan_relationships": orphan_relationships,
+        "processing_time_ms": runtime_ms,
+        "timestamp_coverage_pct": round(timestamp_coverage, 2),
+    }
+
+    data_health = {
+        "schema_tree": [
+            {
+                "table": "document",
+                "schema": corpus_profile.get("source_type", "unknown"),
+                "columns": [
+                    {"name": "text_blocks", "semantic_label": "text_content", "cardinality": text_blocks},
+                    {"name": "table_rows", "semantic_label": "quantity", "cardinality": table_rows},
+                    {"name": "entities", "semantic_label": "identifier", "cardinality": entities_extracted},
+                    {"name": "relationships", "semantic_label": "category", "cardinality": relationships_extracted},
+                ],
+            }
+        ],
+        "datatype_distribution": visuals.get("entity_distribution", []),
+        "completeness": {
+            "complete_pct": round(completeness * 100.0, 2),
+            "missing_pct": round((1.0 - completeness) * 100.0, 2),
+            "null_matrix_summary": {
+                "high_null_columns": 0,
+                "medium_null_columns": 0,
+                "low_null_columns": max(1, total_columns),
+            },
+            "completeness_heatmap_summary": [
+                {"table": "document", "avg_missing_pct": round((1.0 - completeness) * 100.0, 2)}
+            ],
+            "duplicate_distribution": [
+                {"table": "document", "duplicate_proxy": duplicate_rows}
+            ],
+        },
+        "health_score": {
+            "score": round(health_score, 4),
+            "formula": {
+                "completeness": 0.30,
+                "consistency": 0.22,
+                "uniqueness": 0.20,
+                "validity": 0.18,
+                "anomaly_ratio_inverse": 0.10,
+            },
+        },
+    }
+
+    consistency_checks = {
+        "invalid_dates": _safe_int(semantic.get("temporal_inconsistency_count", 0)),
+        "broken_schema_entries": _safe_int(semantic.get("type_conflict_count", 0)),
+        "type_mismatches": _safe_int(semantic.get("type_conflict_count", 0)),
+        "enum_violations": _safe_int(semantic.get("ontology_violation_count", 0)),
+        "null_key_violations": 0,
+        "duplicate_entity_ids": duplicate_rows,
+        "orphan_relationships": orphan_relationships,
+        "foreign_key_issues": _safe_int(graph_metrics.get("disconnected_components", 0)),
+        "schema_drift": schema_drift_count,
+        "inconsistent_category_labels": _safe_int(semantic.get("ontology_violation_count", 0)),
+        "errors": [],
+    }
+
+    executive_summary = []
+    if core_kpis["missing_pct"] >= 10:
+        executive_summary.append(
+            {
+                "message": f"Dataset contains {core_kpis['missing_pct']}% missing values.",
+                "severity": "medium" if core_kpis["missing_pct"] < 25 else "high",
+                "business_impact": "Extraction quality and downstream retrieval can degrade.",
+                "recommendation": "Review sparse document regions and parsing quality.",
+                "confidence": 0.88,
+            }
+        )
+    if orphan_relationships > 0:
+        executive_summary.append(
+            {
+                "message": f"Detected {orphan_relationships} orphan relationship signals.",
+                "severity": "medium",
+                "business_impact": "Knowledge graph connectivity may be incomplete.",
+                "recommendation": "Inspect low-confidence relationships and relation extraction prompts.",
+                "confidence": 0.83,
+            }
+        )
+    if schema_drift_count > 0:
+        executive_summary.append(
+            {
+                "message": "Potential schema drift detected in extracted entities.",
+                "severity": "medium",
+                "business_impact": "Entity normalization may become inconsistent across files.",
+                "recommendation": "Review semantic type conflicts and canonical mapping rules.",
+                "confidence": 0.8,
+            }
+        )
+
+    return {
+        "capabilities": capabilities,
+        "core_kpis": core_kpis,
+        "data_health": data_health,
+        "correlation": {
+            "labels": [],
+            "pearson": [],
+            "spearman": [],
+            "covariance": [],
+            "pair_explorer": [],
+            "strongest_positive": {"pair": None, "value": 0.0},
+            "strongest_negative": {"pair": None, "value": 0.0},
+            "vif": {"available": False, "values": []},
+        },
+        "outliers": {
+            "summary": {
+                "affected_columns": _safe_int(semantic.get("numeric_anomaly_count", 0)),
+                "zscore_anomaly_count": _safe_int(semantic.get("numeric_anomaly_count", 0)),
+                "iqr_outlier_count": _safe_int(semantic.get("numeric_anomaly_count", 0)),
+            },
+            "columns": [],
+        },
+        "consistency_checks": consistency_checks,
+        "statistical_profiles": {
+            "available": bool(visuals.get("confidence_histograms")),
+            "columns": {},
+            "histograms": visuals.get("confidence_histograms", {}),
+        },
+        "time_series": {
+            "available": False,
+            "series": [],
+            "trend_points": [],
+            "moving_average": [],
+            "rolling_volatility": [],
+            "event_spikes": [],
+        },
+        "kg_analytics": {
+            "entity_distribution": visuals.get("entity_distribution", []),
+            "relationship_distribution": visuals.get("relation_distributions", []),
+            "degree_centrality": visuals.get("node_centrality", []),
+            "connected_components": _safe_int(graph_metrics.get("disconnected_components", 0)),
+            "graph_density": _safe_float(visuals.get("graph_density", 0.0)),
+        },
+        "executive_summary": executive_summary,
+    }
+
+
 @contextmanager
 def _status_heartbeat(file_id: str, status: str, status_message: str, interval_seconds: float = 15.0):
     stop_event = threading.Event()
@@ -271,12 +481,18 @@ def get_file_eda_visuals(file_ids: Optional[List[str]] = None) -> Dict:
         scorecard = _read_json(bundle.get("kg_quality_scorecard_path", ""))
         visuals = _read_json(bundle.get("visual_metrics_path", ""))
         status = get_file_status(file_id) or {}
+        phase1 = _build_file_phase1_blocks(status, summary, scorecard, visuals)
+
+        started_at = _safe_float(status.get("uploaded_at", 0.0))
+        completed_at = _safe_float(status.get("completed_at", 0.0))
+        if completed_at > 0 and started_at > 0:
+            phase1["core_kpis"]["processing_time_ms"] = int(max(0.0, completed_at - started_at) * 1000)
 
         runs.append(
             {
                 "file_id": file_id,
                 "filename": status.get("filename", file_id),
-                "completed_at": status.get("completed_at", 0),
+                "completed_at": completed_at,
                 "source": (summary.get("source") or {}).get("ext", "unknown"),
                 "graph_density": float(visuals.get("graph_density", 0.0) or 0.0),
                 "overall_kg_quality_score": float(scorecard.get("overall_kg_quality_score", 0.0) or 0.0),
@@ -287,6 +503,16 @@ def get_file_eda_visuals(file_ids: Optional[List[str]] = None) -> Dict:
                 "relation_distributions": visuals.get("relation_distributions", []),
                 "confidence_histograms": visuals.get("confidence_histograms", {}),
                 "semantic_clusters": visuals.get("semantic_clusters", []),
+                "capabilities": phase1.get("capabilities", {}),
+                "core_kpis": phase1.get("core_kpis", {}),
+                "data_health": phase1.get("data_health", {}),
+                "correlation": phase1.get("correlation", {}),
+                "outliers": phase1.get("outliers", {}),
+                "consistency_checks": phase1.get("consistency_checks", {}),
+                "statistical_profiles": phase1.get("statistical_profiles", {}),
+                "time_series": phase1.get("time_series", {}),
+                "kg_analytics": phase1.get("kg_analytics", {}),
+                "executive_summary": phase1.get("executive_summary", []),
             }
         )
 

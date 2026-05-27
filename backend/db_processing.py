@@ -297,6 +297,16 @@ def get_eda_visuals(file_ids: Optional[List[str]] = None) -> Dict[str, Any]:
         table_stats = artifact.get("table_stats", {})
         anomaly_flags = artifact.get("anomaly_flags", {})
         rel_evidence = artifact.get("relationship_evidence", {})
+        capabilities = artifact.get("capabilities", {}) or {}
+        core_kpis = artifact.get("core_kpis", {}) or {}
+        data_health = artifact.get("data_health", {}) or {}
+        correlation = artifact.get("correlation", {}) or {}
+        outliers = artifact.get("outliers", {}) or {}
+        consistency_checks = artifact.get("consistency_checks", {}) or {}
+        statistical_profiles = artifact.get("statistical_profiles", {}) or {}
+        time_series = artifact.get("time_series", {}) or {}
+        kg_analytics = artifact.get("kg_analytics", {}) or {}
+        executive_summary = artifact.get("executive_summary", []) or []
 
         accuracy = summary.get("accuracy", {})
         graph_trust = accuracy.get("graph_trust", {})
@@ -367,13 +377,45 @@ def get_eda_visuals(file_ids: Optional[List[str]] = None) -> Dict[str, Any]:
         top_relationships.sort(key=lambda x: x["overlap_pct"], reverse=True)
 
         status = get_db_status(db_id)
+        processing_time_ms = 0
+        started_at = _safe_float(status.get("uploaded_at", 0.0))
+        completed_at = _safe_float(summary.get("completed_at", status.get("completed_at", 0.0)))
+        if started_at > 0 and completed_at > 0:
+            processing_time_ms = int(max(0.0, completed_at - started_at) * 1000)
+
+        if not core_kpis:
+            core_kpis = {
+                "total_records": 0,
+                "total_columns": sum(int(t.get("column_count", 0) or 0) for t in top_tables),
+                "missing_pct": 0.0,
+                "duplicate_rows": 0,
+                "anomaly_count": sum(int(t.get("high_risk_column_count", 0) or 0) for t in top_tables),
+                "file_size": 0,
+                "entities_extracted": 0,
+                "relationships_extracted": len(rel_evidence),
+                "schema_drift_count": 0,
+                "orphan_relationships": sum(1 for v in rel_evidence.values() if str(v.get("joinability_signal", "weak")).lower() == "weak"),
+                "processing_time_ms": processing_time_ms,
+                "timestamp_coverage_pct": 0.0,
+            }
+        else:
+            core_kpis["processing_time_ms"] = int(core_kpis.get("processing_time_ms", processing_time_ms) or processing_time_ms)
+
+        if not capabilities:
+            capabilities = {
+                "supports_time_series": False,
+                "supports_correlation": False,
+                "supports_kg_metrics": True,
+                "supports_feature_importance": False,
+            }
+
         runs.append(
             {
                 "db_id": db_id,
                 "status": status.get("status", "unknown"),
                 "engine": status.get("engine") or "db",
                 "database": status.get("database") or db_id,
-                "completed_at": summary.get("completed_at", status.get("completed_at", 0)),
+                "completed_at": completed_at,
                 "generated_at": artifact.get("generated_at", 0),
                 "overall_kg_quality_score": round(overall_quality, 4),
                 "confidence_score": round(confidence_score, 4),
@@ -393,6 +435,16 @@ def get_eda_visuals(file_ids: Optional[List[str]] = None) -> Dict[str, Any]:
                 "anomaly_table_count": len(anomaly_flags),
                 "top_tables": top_tables[:10],
                 "top_relationship_evidence": top_relationships[:12],
+                "capabilities": capabilities,
+                "core_kpis": core_kpis,
+                "data_health": data_health,
+                "correlation": correlation,
+                "outliers": outliers,
+                "consistency_checks": consistency_checks,
+                "statistical_profiles": statistical_profiles,
+                "time_series": time_series,
+                "kg_analytics": kg_analytics,
+                "executive_summary": executive_summary,
             }
         )
 

@@ -1,6 +1,8 @@
 # Aggregate and surface ML metrics artifacts for UI/analytics
 import glob
+import csv
 import hashlib
+import io
 import json
 import logging
 import os
@@ -11,7 +13,7 @@ from typing import Dict, List, Optional, Set
 
 import aiofiles
 from dotenv import load_dotenv
-from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Query, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -736,16 +738,31 @@ async def file_eda_report(file_id: str):
     return payload
 
 
-@app.get("/eda/dashboard")
-async def eda_dashboard(file_ids: Optional[str] = Query(None), db_ids: Optional[str] = Query(None)):
-    requested_file_ids = None
-    requested_db_ids = None
+def _parse_ids(ids_csv: Optional[str]) -> Optional[List[str]]:
+    if not ids_csv:
+        return None
+    values = [x.strip() for x in ids_csv.split(",") if x.strip()]
+    return values or None
 
-    if file_ids:
-        requested_file_ids = [x.strip() for x in file_ids.split(",") if x.strip()]
-    if db_ids:
-        requested_db_ids = [x.strip() for x in db_ids.split(",") if x.strip()]
 
+def _safe_float(value, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except Exception:
+        return default
+
+
+def _safe_int(value, default: int = 0) -> int:
+    try:
+        return int(value)
+    except Exception:
+        return default
+
+
+def _build_eda_dashboard_payload(
+    requested_file_ids: Optional[List[str]] = None,
+    requested_db_ids: Optional[List[str]] = None,
+):
     db_visuals = get_eda_visuals(requested_db_ids)
     file_visuals = get_file_eda_visuals(requested_file_ids)
 
@@ -776,6 +793,235 @@ async def eda_dashboard(file_ids: Optional[str] = Query(None), db_ids: Optional[
         + (float(file_summary.get("avg_confidence_score", 0.0) or 0.0) * file_run_count)
     ) / max(1, total_runs)
 
+    all_runs = list(db_visuals.get("runs", [])) + list(file_visuals.get("runs", []))
+
+    capabilities = {
+        "supports_time_series": any(bool((r.get("capabilities") or {}).get("supports_time_series", False)) for r in all_runs),
+        "supports_correlation": any(bool((r.get("capabilities") or {}).get("supports_correlation", False)) for r in all_runs),
+        "supports_kg_metrics": any(bool((r.get("capabilities") or {}).get("supports_kg_metrics", False)) for r in all_runs),
+        "supports_feature_importance": any(bool((r.get("capabilities") or {}).get("supports_feature_importance", False)) for r in all_runs),
+    }
+
+    merged_core = {
+        "total_records": sum(_safe_int((r.get("core_kpis") or {}).get("total_records", 0)) for r in all_runs),
+        "total_columns": sum(_safe_int((r.get("core_kpis") or {}).get("total_columns", 0)) for r in all_runs),
+        "missing_pct": 0.0,
+        "duplicate_rows": sum(_safe_int((r.get("core_kpis") or {}).get("duplicate_rows", 0)) for r in all_runs),
+        "anomaly_count": sum(_safe_int((r.get("core_kpis") or {}).get("anomaly_count", 0)) for r in all_runs),
+        "file_size": sum(_safe_int((r.get("core_kpis") or {}).get("file_size", 0)) for r in all_runs),
+        "entities_extracted": sum(_safe_int((r.get("core_kpis") or {}).get("entities_extracted", 0)) for r in all_runs),
+        "relationships_extracted": sum(_safe_int((r.get("core_kpis") or {}).get("relationships_extracted", 0)) for r in all_runs),
+        "schema_drift_count": sum(_safe_int((r.get("core_kpis") or {}).get("schema_drift_count", 0)) for r in all_runs),
+        "orphan_relationships": sum(_safe_int((r.get("core_kpis") or {}).get("orphan_relationships", 0)) for r in all_runs),
+        "processing_time_ms": sum(_safe_int((r.get("core_kpis") or {}).get("processing_time_ms", 0)) for r in all_runs),
+        "timestamp_coverage_pct": 0.0,
+    }
+    if all_runs:
+        merged_core["missing_pct"] = round(
+            sum(_safe_float((r.get("core_kpis") or {}).get("missing_pct", 0.0)) for r in all_runs) / len(all_runs),
+            2,
+        )
+        merged_core["timestamp_coverage_pct"] = round(
+            sum(_safe_float((r.get("core_kpis") or {}).get("timestamp_coverage_pct", 0.0)) for r in all_runs) / len(all_runs),
+            2,
+        )
+
+    executive_summary = []
+    for run in all_runs:
+        for insight in (run.get("executive_summary") or []):
+            if isinstance(insight, dict) and insight.get("message"):
+                executive_summary.append(insight)
+
+    warnings = []
+    for section in ["correlation", "time_series", "statistical_profiles"]:
+        available = any(bool((r.get(section) or {}).get("available", (r.get(section) or {}).get("labels"))) for r in all_runs)
+        if not available:
+            warnings.append(
+                {
+                    "section": section,
+                    "message": f"Section '{section}' has limited support for current selected sources.",
+                }
+            )
+
+    def _chart_card(
+        chart_id: str,
+        section: str,
+        chart_type: str,
+        library_hint: str,
+        title: str,
+        data: Dict,
+        options: Optional[Dict] = None,
+        description: str = "",
+        source: str = "combined",
+        empty_reason: Optional[str] = None,
+    ) -> Dict:
+        return {
+            "chart_id": chart_id,
+            "section": section,
+            "chart_type": chart_type,
+            "library_hint": library_hint,
+            "title": title,
+            "description": description,
+            "data": data,
+            "options": options or {},
+            "meta": {
+                "source": source,
+                "supports_drilldown": False,
+                "empty_reason": empty_reason,
+            },
+        }
+
+    def _run_contract(run: Dict, source: str) -> Dict:
+        kpis = run.get("core_kpis") or {}
+        correlation = run.get("correlation") or {}
+        ts = run.get("time_series") or {}
+        labels = correlation.get("labels") or []
+        pearson = correlation.get("pearson") or []
+        spearman = correlation.get("spearman") or []
+
+        charts = []
+        charts.append(
+            _chart_card(
+                chart_id="kpi.health.gauge",
+                section="kpi_health",
+                chart_type="gauge",
+                library_hint="recharts",
+                title="Health Score",
+                data={
+                    "value": _safe_float(
+                        ((run.get("data_health") or {}).get("health_score", {}) or {}).get(
+                            "score", run.get("overall_kg_quality_score", 0.0)
+                        )
+                    )
+                },
+                options={"min": 0, "max": 1, "tooltip": True},
+                description="Composite health index",
+                source=source,
+            )
+        )
+        charts.append(
+            _chart_card(
+                chart_id="kpi.completeness.donut",
+                section="kpi_health",
+                chart_type="donut",
+                library_hint="recharts",
+                title="Completeness",
+                data={
+                    "series": [
+                        {"name": "complete", "value": max(0.0, 100.0 - _safe_float(kpis.get("missing_pct", 0.0)))},
+                        {"name": "missing", "value": _safe_float(kpis.get("missing_pct", 0.0))},
+                    ]
+                },
+                options={"tooltip": True, "legend": True},
+                source=source,
+            )
+        )
+        charts.append(
+            _chart_card(
+                chart_id="timeseries.trend",
+                section="time_series",
+                chart_type="line",
+                library_hint="recharts",
+                title="Trend Over Time",
+                data={"series": ts.get("trend_points") or []},
+                options={"xKey": "date", "yKey": "count", "tooltip": True},
+                source=source,
+                empty_reason=None if (ts.get("trend_points") or []) else "No timestamp trend points available",
+            )
+        )
+        charts.append(
+            _chart_card(
+                chart_id="correlation.pearson",
+                section="correlation",
+                chart_type="heatmap",
+                library_hint="echarts",
+                title="Pearson Correlation",
+                data={"x": labels, "y": labels, "values": pearson},
+                options={"tooltip": True, "legend": True},
+                source=source,
+                empty_reason=None if labels and pearson else "Insufficient numeric dimensions",
+            )
+        )
+        charts.append(
+            _chart_card(
+                chart_id="correlation.spearman",
+                section="correlation",
+                chart_type="heatmap",
+                library_hint="echarts",
+                title="Spearman Correlation",
+                data={"x": labels, "y": labels, "values": spearman},
+                options={"tooltip": True, "legend": True},
+                source=source,
+                empty_reason=None if labels and spearman else "Insufficient numeric dimensions",
+            )
+        )
+        return {
+            "version": "1.0",
+            "charts": charts,
+        }
+
+    def _attach_run_contracts(visuals: Dict, source: str) -> Dict:
+        runs = visuals.get("runs") or []
+        for run in runs:
+            run["charts_contract"] = _run_contract(run, source)
+        return visuals
+
+    db_visuals = _attach_run_contracts(db_visuals, "db")
+    file_visuals = _attach_run_contracts(file_visuals, "file")
+
+    def _section_charts(run: Optional[Dict], section: str) -> List[Dict]:
+        if not run:
+            return []
+        return [c for c in (run.get("charts_contract", {}).get("charts", []) or []) if c.get("section") == section]
+
+    def _section_has_usable_chart(charts: List[Dict]) -> bool:
+        for chart in charts:
+            meta = chart.get("meta") or {}
+            if meta.get("empty_reason"):
+                continue
+            data = chart.get("data") or {}
+            if isinstance(data.get("series"), list) and len(data.get("series")) > 0:
+                return True
+            if isinstance(data.get("values"), list) and len(data.get("values")) > 0:
+                return True
+            if data.get("value") is not None:
+                return True
+        return False
+
+    def _pick_best_run_for_section(section: str) -> Optional[Dict]:
+        if not all_runs:
+            return None
+        ordered = sorted(all_runs, key=lambda r: _safe_float(r.get("completed_at", 0.0)), reverse=True)
+        for run in ordered:
+            charts = _section_charts(run, section)
+            if charts and _section_has_usable_chart(charts):
+                return run
+        for run in ordered:
+            if _section_charts(run, section):
+                return run
+        return ordered[0]
+
+    kpi_run = _pick_best_run_for_section("kpi_health")
+    corr_run = _pick_best_run_for_section("correlation")
+    ts_run = _pick_best_run_for_section("time_series")
+    charts_contract = {
+        "version": "1.0",
+        "sections": [
+            {
+                "section": "kpi_health",
+                "charts": _section_charts(kpi_run, "kpi_health"),
+            },
+            {
+                "section": "correlation",
+                "charts": _section_charts(corr_run, "correlation"),
+            },
+            {
+                "section": "time_series",
+                "charts": _section_charts(ts_run, "time_series"),
+            },
+        ],
+    }
+
     return {
         "summary": {
             "total_runs": total_runs,
@@ -787,9 +1033,132 @@ async def eda_dashboard(file_ids: Optional[str] = Query(None), db_ids: Optional[
             "combined_trust_score": round(combined_trust, 4),
             "updated_at": time.time(),
         },
+        "capabilities": capabilities,
+        "core_kpis": merged_core,
+        "charts_contract": charts_contract,
+        "executive_summary": executive_summary[:40],
+        "warnings": warnings,
         "db_eda": db_visuals,
         "file_eda": file_visuals,
     }
+
+
+def _eda_export_csv(payload: Dict) -> str:
+    out = io.StringIO()
+    writer = csv.writer(out)
+    writer.writerow(
+        [
+            "source",
+            "run_id",
+            "name",
+            "status",
+            "quality_score",
+            "confidence_score",
+            "retrieval_readiness_score",
+            "trust_score",
+            "total_records",
+            "total_columns",
+            "missing_pct",
+            "anomaly_count",
+            "entities_extracted",
+            "relationships_extracted",
+            "processing_time_ms",
+            "supports_correlation",
+            "supports_time_series",
+            "supports_kg_metrics",
+            "supports_feature_importance",
+        ]
+    )
+
+    for run in payload.get("db_eda", {}).get("runs", []):
+        kpis = run.get("core_kpis") or {}
+        caps = run.get("capabilities") or {}
+        writer.writerow(
+            [
+                "db",
+                run.get("db_id", ""),
+                run.get("database", ""),
+                run.get("status", ""),
+                run.get("overall_kg_quality_score", 0),
+                run.get("confidence_score", 0),
+                run.get("retrieval_readiness_score", 0),
+                run.get("graph_trust_score", 0),
+                kpis.get("total_records", 0),
+                kpis.get("total_columns", 0),
+                kpis.get("missing_pct", 0),
+                kpis.get("anomaly_count", 0),
+                kpis.get("entities_extracted", 0),
+                kpis.get("relationships_extracted", 0),
+                kpis.get("processing_time_ms", 0),
+                caps.get("supports_correlation", False),
+                caps.get("supports_time_series", False),
+                caps.get("supports_kg_metrics", False),
+                caps.get("supports_feature_importance", False),
+            ]
+        )
+
+    for run in payload.get("file_eda", {}).get("runs", []):
+        kpis = run.get("core_kpis") or {}
+        caps = run.get("capabilities") or {}
+        writer.writerow(
+            [
+                "file",
+                run.get("file_id", ""),
+                run.get("filename", ""),
+                "completed",
+                run.get("overall_kg_quality_score", 0),
+                run.get("confidence_score", 0),
+                run.get("retrieval_readiness_score", 0),
+                run.get("confidence_score", 0),
+                kpis.get("total_records", 0),
+                kpis.get("total_columns", 0),
+                kpis.get("missing_pct", 0),
+                kpis.get("anomaly_count", 0),
+                kpis.get("entities_extracted", 0),
+                kpis.get("relationships_extracted", 0),
+                kpis.get("processing_time_ms", 0),
+                caps.get("supports_correlation", False),
+                caps.get("supports_time_series", False),
+                caps.get("supports_kg_metrics", False),
+                caps.get("supports_feature_importance", False),
+            ]
+        )
+
+    return out.getvalue()
+
+
+@app.get("/eda/dashboard")
+async def eda_dashboard(file_ids: Optional[str] = Query(None), db_ids: Optional[str] = Query(None)):
+    payload = _build_eda_dashboard_payload(
+        requested_file_ids=_parse_ids(file_ids),
+        requested_db_ids=_parse_ids(db_ids),
+    )
+    return payload
+
+
+@app.get("/eda/export")
+async def eda_export(
+    format: str = Query("json", pattern="^(json|csv)$"),
+    file_ids: Optional[str] = Query(None),
+    db_ids: Optional[str] = Query(None),
+):
+    payload = _build_eda_dashboard_payload(
+        requested_file_ids=_parse_ids(file_ids),
+        requested_db_ids=_parse_ids(db_ids),
+    )
+    ts = int(time.time())
+    if format == "csv":
+        csv_text = _eda_export_csv(payload)
+        return Response(
+            content=csv_text,
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=eda_dashboard_{ts}.csv"},
+        )
+    return Response(
+        content=json.dumps(payload),
+        media_type="application/json",
+        headers={"Content-Disposition": f"attachment; filename=eda_dashboard_{ts}.json"},
+    )
 
 
 @app.get("/dictionary/tables")

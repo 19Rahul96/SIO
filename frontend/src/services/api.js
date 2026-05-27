@@ -13,6 +13,26 @@ async function req(path, opts = {}) {
   return res.json()
 }
 
+async function reqBlob(path, opts = {}) {
+  const res = await fetch(`${BASE}${path}`, opts)
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ detail: res.statusText }))
+    const detail = body.detail || res.statusText
+    const err = new Error(typeof detail === 'string' ? detail : detail.message || 'Request failed')
+    err.status = res.status
+    err.detail = detail
+    throw err
+  }
+  const blob = await res.blob()
+  const disposition = res.headers.get('content-disposition') || ''
+  const nameMatch = disposition.match(/filename="?([^\";]+)"?/) || []
+  return {
+    blob,
+    filename: nameMatch[1] || null,
+    contentType: res.headers.get('content-type') || blob.type,
+  }
+}
+
 const api = {
   upload: (file, ctx = {}) => {
     const fd = new FormData()
@@ -128,6 +148,13 @@ const api = {
     if (dbIds.length) params.set('db_ids', dbIds.join(','))
     const qs = params.toString()
     return req(`/eda/dashboard${qs ? `?${qs}` : ''}`)
+  },
+  exportEdaDashboard: ({ fileIds = [], dbIds = [], format = 'json' } = {}) => {
+    const params = new URLSearchParams()
+    if (fileIds.length) params.set('file_ids', fileIds.join(','))
+    if (dbIds.length) params.set('db_ids', dbIds.join(','))
+    params.set('format', format)
+    return reqBlob(`/eda/export?${params.toString()}`)
   },
   getMlMetrics: () => req('/metrics/aggregate'),
 
