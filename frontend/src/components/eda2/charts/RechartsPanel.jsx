@@ -26,6 +26,8 @@ export default function RechartsPanel({ chart }) {
     const xKey = chart?.options?.xKey || 'name'
     const yKey = chart?.options?.yKey || 'value'
     const color = chart?.options?.color || '#2563eb'
+    const seriesKeys = Array.isArray(chart?.options?.seriesKeys) ? chart.options.seriesKeys : []
+    const stacked = Boolean(chart?.options?.stacked)
     if (!series.length) return <div className="text-[11px] text-t3">{chart?.meta?.empty_reason || 'No bar data available.'}</div>
     return (
       <div style={{ width: '100%', height: 260 }}>
@@ -35,7 +37,20 @@ export default function RechartsPanel({ chart }) {
             <XAxis dataKey={xKey} tick={{ fontSize: 10 }} />
             <YAxis tick={{ fontSize: 10 }} />
             <Tooltip />
-            <Bar dataKey={yKey} fill={color} radius={[4, 4, 0, 0]} />
+            {seriesKeys.length > 0 ? (
+              seriesKeys.map((s, idx) => (
+                <Bar
+                  key={`${s.key}-${idx}`}
+                  dataKey={s.key}
+                  name={s.name || s.key}
+                  fill={s.color || '#2563eb'}
+                  stackId={stacked ? 'a' : undefined}
+                  radius={stacked ? [0, 0, 0, 0] : [4, 4, 0, 0]}
+                />
+              ))
+            ) : (
+              <Bar dataKey={yKey} fill={color} radius={[4, 4, 0, 0]} />
+            )}
           </BarChart>
         </ResponsiveContainer>
       </div>

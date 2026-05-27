@@ -452,6 +452,124 @@ export default function EDAVisualsViewer2({ fileIds = [], dbIds = [], onClose, o
     }
   }, [runs, outliers])
 
+  const section3Charts = useMemo(() => {
+    const rankedRaw = (section3Outliers?.columns || [])
+      .map((c) => {
+        const iqr = safeNum(c?.iqr_outliers)
+        const z = safeNum(c?.zscore_outliers)
+        const bands = Array.isArray(c?.zscore_bins) ? c.zscore_bins : []
+        const lowerExtreme = safeNum((bands.find((b) => b.band === '<-3') || {}).count)
+        const upperExtreme = safeNum((bands.find((b) => b.band === '>3') || {}).count)
+        return {
+          column: String(c?.column || 'unknown'),
+          iqr,
+          z,
+          lowerExtreme,
+          upperExtreme,
+          total: iqr + z,
+        }
+      })
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 12)
+
+    const ranked = rankedRaw
+      .map((r) => ({
+        name: r.column.length > 36 ? `${r.column.slice(0, 33)}...` : r.column,
+        value: r.total,
+        iqr: r.iqr,
+        zscore: r.z,
+        zneg: r.lowerExtreme,
+        zpos: r.upperExtreme,
+      }))
+
+    if (!ranked.length) return []
+
+    const scatterPoints = rankedRaw
+      .map((r) => ({
+        x: r.iqr,
+        y: r.z,
+        label: r.column,
+        size: Math.max(7, Math.min(16, 7 + r.total * 0.3)),
+        color: r.z >= r.iqr ? '#dc2626' : '#2563eb',
+      }))
+      .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y))
+
+    const maxAxis = Math.max(
+      1,
+      ...scatterPoints.flatMap((p) => [p.x, p.y]),
+    )
+
+    const out = [
+      {
+        chart_id: 'outliers.impact.ranked',
+        chart_type: 'bar',
+        library_hint: 'recharts',
+        title: 'Ranked Outlier Impact (Top Columns)',
+        description: 'Columns ranked by total outlier burden (IQR + Z-score).',
+        data: { series: ranked },
+        options: { xKey: 'name', yKey: 'value', color: '#dc2626' },
+        meta: {
+          source: selectedRun?.file_id ? 'file' : 'db',
+          empty_reason: null,
+        },
+      },
+      {
+        chart_id: 'outliers.ztail.composition',
+        chart_type: 'bar',
+        library_hint: 'recharts',
+        title: 'Z-Score Extreme Tail Composition',
+        description: 'Per-column split of extreme negative vs positive z-score events (|z| > 3).',
+        data: {
+          series: ranked.map((r) => ({
+            name: r.name,
+            extreme_negative: r.zneg,
+            extreme_positive: r.zpos,
+          })),
+        },
+        options: {
+          xKey: 'name',
+          seriesKeys: [
+            { key: 'extreme_negative', name: '< -3', color: '#2563eb' },
+            { key: 'extreme_positive', name: '> 3', color: '#dc2626' },
+          ],
+          stacked: true,
+        },
+        meta: {
+          source: selectedRun?.file_id ? 'file' : 'db',
+          empty_reason: null,
+        },
+      },
+    ]
+
+    if (scatterPoints.length) {
+      out.push({
+        chart_id: 'outliers.iqr-vs-z.scatter',
+        chart_type: 'scatter',
+        library_hint: 'plotly',
+        title: 'IQR Outliers vs Z-Score Outliers',
+        description: 'Columns above diagonal have stronger z-score anomaly signal than IQR signal.',
+        data: {
+          points: scatterPoints,
+          referenceLine: {
+            name: 'y = x',
+            x: [0, maxAxis],
+            y: [0, maxAxis],
+          },
+        },
+        options: {
+          xTitle: 'IQR Outlier Count',
+          yTitle: 'Z-Score Outlier Count',
+        },
+        meta: {
+          source: selectedRun?.file_id ? 'file' : 'db',
+          empty_reason: null,
+        },
+      })
+    }
+
+    return out
+  }, [section3Outliers, selectedRun?.file_id])
+
   const section5Charts = useMemo(() => {
     const columns = Object.entries(stats.columns || {}).slice(0, 6)
     const out = []
@@ -796,6 +914,18 @@ export default function EDAVisualsViewer2({ fileIds = [], dbIds = [], onClose, o
                 <div className="mcard"><div className="text-[10px] text-t3">Z-score anomalies</div><div className="text-[20px] font-sora text-t1">{num(section3Outliers?.summary?.zscore_anomaly_count)}</div></div>
                 <div className="mcard"><div className="text-[10px] text-t3">IQR outliers</div><div className="text-[20px] font-sora text-t1">{num(section3Outliers?.summary?.iqr_outlier_count)}</div></div>
               </div>
+              {section3Charts.length > 0 && (
+                <div className="card">
+                  <div className="text-[12px] font-semibold text-t1 mb-2">Outlier impact ranking</div>
+                  {section3Charts.map((chart) => (
+                    <div key={chart.chart_id} className="bg-bg4 border border-dborder rounded-sm px-3 py-2">
+                      <div className="text-[11px] text-t1 font-semibold mb-1">{chart.title}</div>
+                      {chart.description && <div className="text-[10px] text-t3 mb-2">{chart.description}</div>}
+                      <ChartRenderer chart={chart} />
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="card">
                 <div className="text-[12px] font-semibold text-t1 mb-2">Box plots and z-score distributions</div>
                 {(section3Outliers.columns || []).slice(0, 15).map((c) => (
