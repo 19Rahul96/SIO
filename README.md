@@ -56,17 +56,27 @@ npm install
 
 ## Running
 
-### Backend (from /backend directory)
+### Recommended startup (from repo root)
 ```bash
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+./start_backend.sh
+./start_frontend.sh
 ```
 
-### Frontend (from /frontend directory)
+This uses stable local ports to avoid collisions:
+- Backend: `http://127.0.0.1:8010`
+- Frontend: `http://127.0.0.1:5180`
+
+### Backend (manual, from /backend directory)
+```bash
+uvicorn --app-dir $(pwd) main:app --reload --reload-exclude "data/*" --reload-exclude "__pycache__/*" --host 0.0.0.0 --port 8010
+```
+
+### Frontend (manual, from /frontend directory)
 ```bash
 npm run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173)
+Open [http://localhost:5180](http://localhost:5180)
 
 ---
 

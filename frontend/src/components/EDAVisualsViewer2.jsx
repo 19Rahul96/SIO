@@ -467,10 +467,14 @@ export default function EDAVisualsViewer2({ fileIds = [], dbIds = [], onClose, o
           lowerExtreme,
           upperExtreme,
           total: iqr + z,
+          imbalance: Math.abs(iqr - z),
+          dominant_method: iqr >= z ? 'IQR' : 'Z-score',
         }
       })
       .sort((a, b) => b.total - a.total)
       .slice(0, 12)
+
+    const totalBurden = rankedRaw.reduce((acc, r) => acc + r.total, 0)
 
     const ranked = rankedRaw
       .map((r) => ({
@@ -480,6 +484,9 @@ export default function EDAVisualsViewer2({ fileIds = [], dbIds = [], onClose, o
         zscore: r.z,
         zneg: r.lowerExtreme,
         zpos: r.upperExtreme,
+        share_pct: totalBurden > 0 ? Number(((r.total / totalBurden) * 100).toFixed(2)) : 0,
+        imbalance: r.imbalance,
+        dominant_method: r.dominant_method,
       }))
 
     if (!ranked.length) return []
@@ -504,8 +511,8 @@ export default function EDAVisualsViewer2({ fileIds = [], dbIds = [], onClose, o
         chart_id: 'outliers.impact.ranked',
         chart_type: 'bar',
         library_hint: 'recharts',
-        title: 'Ranked Outlier Impact (Top Columns)',
-        description: 'Columns ranked by total outlier burden (IQR + Z-score).',
+        title: 'Top Columns by Outlier Burden',
+        description: 'Absolute burden (IQR + Z-score counts) to prioritize investigation volume.',
         data: { series: ranked },
         options: { xKey: 'name', yKey: 'value', color: '#dc2626' },
         meta: {
@@ -514,25 +521,65 @@ export default function EDAVisualsViewer2({ fileIds = [], dbIds = [], onClose, o
         },
       },
       {
-        chart_id: 'outliers.ztail.composition',
+        chart_id: 'outliers.method.split',
         chart_type: 'bar',
         library_hint: 'recharts',
-        title: 'Z-Score Extreme Tail Composition',
-        description: 'Per-column split of extreme negative vs positive z-score events (|z| > 3).',
+        title: 'Detection Method Split by Column',
+        description: 'Stacked split of IQR vs Z-score detections to show whether anomalies are distributional or tail-driven.',
         data: {
           series: ranked.map((r) => ({
             name: r.name,
-            extreme_negative: r.zneg,
-            extreme_positive: r.zpos,
+            iqr: r.iqr,
+            zscore: r.zscore,
           })),
         },
         options: {
           xKey: 'name',
           seriesKeys: [
-            { key: 'extreme_negative', name: '< -3', color: '#2563eb' },
-            { key: 'extreme_positive', name: '> 3', color: '#dc2626' },
+            { key: 'iqr', name: 'IQR', color: '#2563eb' },
+            { key: 'zscore', name: 'Z-score', color: '#dc2626' },
           ],
           stacked: true,
+        },
+        meta: {
+          source: selectedRun?.file_id ? 'file' : 'db',
+          empty_reason: null,
+        },
+      },
+      {
+        chart_id: 'outliers.burden.share',
+        chart_type: 'donut',
+        library_hint: 'recharts',
+        title: 'Outlier Burden Share (Top Columns)',
+        description: 'Share-of-risk view that highlights concentration. A few dominant slices indicate focused remediation opportunities.',
+        data: {
+          series: (() => {
+            const top = ranked.slice(0, 6).map((r) => ({ name: r.name, value: r.value }))
+            const rest = ranked.slice(6).reduce((acc, r) => acc + r.value, 0)
+            return rest > 0 ? [...top, { name: 'Others', value: rest }] : top
+          })(),
+        },
+        options: {},
+        meta: {
+          source: selectedRun?.file_id ? 'file' : 'db',
+          empty_reason: null,
+        },
+      },
+      {
+        chart_id: 'outliers.method.imbalance',
+        chart_type: 'line',
+        library_hint: 'recharts',
+        title: 'Method Disagreement Trend',
+        description: 'Absolute gap |IQR - Z-score| across ranked columns. Higher values indicate unstable anomaly signal needing manual review.',
+        data: {
+          series: ranked.map((r) => ({
+            name: r.name,
+            imbalance: r.imbalance,
+          })),
+        },
+        options: {
+          xKey: 'name',
+          yKey: 'imbalance',
         },
         meta: {
           source: selectedRun?.file_id ? 'file' : 'db',
@@ -569,6 +616,53 @@ export default function EDAVisualsViewer2({ fileIds = [], dbIds = [], onClose, o
 
     return out
   }, [section3Outliers, selectedRun?.file_id])
+
+  const section3TopColumns = useMemo(() => {
+    const rows = (section3Outliers?.columns || [])
+      .map((c) => {
+        const iqr = safeNum(c?.iqr_outliers)
+        const z = safeNum(c?.zscore_outliers)
+        return {
+          column: String(c?.column || 'unknown'),
+          iqr,
+          z,
+          total: iqr + z,
+        }
+      })
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 8)
+
+    if (!rows.length) return []
+
+    const maxTotal = Math.max(1, ...rows.map((r) => r.total))
+
+    return rows.map((r) => {
+      const ratio = r.total / maxTotal
+      let severity = 'Low'
+      let color = '#16a34a'
+      let bg = 'rgba(22,163,74,.12)'
+
+      if (ratio >= 0.66) {
+        severity = 'High'
+        color = '#dc2626'
+        bg = 'rgba(220,38,38,.12)'
+      } else if (ratio >= 0.33) {
+        severity = 'Medium'
+        color = '#d97706'
+        bg = 'rgba(217,119,6,.12)'
+      }
+
+      return {
+        ...r,
+        severity,
+        badgeStyle: {
+          color,
+          background: bg,
+          border: `1px solid ${color}33`,
+        },
+      }
+    })
+  }, [section3Outliers])
 
   const section5Charts = useMemo(() => {
     const columns = Object.entries(stats.columns || {}).slice(0, 6)
@@ -681,6 +775,145 @@ export default function EDAVisualsViewer2({ fileIds = [], dbIds = [], onClose, o
         meta: {
           source: selectedRun?.file_id ? 'file' : 'db',
           empty_reason: null,
+        },
+      })
+    }
+
+    const aggregateRows = Object.entries(stats.columns || {})
+      .map(([name, s]) => {
+        const meanAbs = Math.abs(Number(s.mean || 0))
+        const std = Number(s.std_dev || 0)
+        const cv = meanAbs > 0 ? std / meanAbs : 0
+        const p10 = Number(s.p10 ?? 0)
+        const p90 = Number(s.p90 ?? 0)
+        const q1 = Number(s.q1 ?? s.box?.q1 ?? 0)
+        const q3 = Number(s.q3 ?? s.box?.q3 ?? 0)
+        const iqr = q3 - q1
+        const tailSpread = p90 - p10
+        const skewAbs = Math.abs(Number(s.skewness || 0))
+        const kurtAbs = Math.abs(Number(s.kurtosis || 0))
+        const shapeRisk = Math.max(0, Math.min(1, (skewAbs / 2 + kurtAbs / 6) / 2))
+        return {
+          name,
+          short: name.length > 30 ? `${name.slice(0, 27)}...` : name,
+          cv,
+          tailSpread,
+          iqr,
+          skewAbs,
+          kurtAbs,
+          shapeRisk,
+          pointSize: Math.max(7, Math.min(18, 7 + std * 0.45)),
+        }
+      })
+      .filter((r) => Number.isFinite(r.cv) && Number.isFinite(r.tailSpread) && Number.isFinite(r.shapeRisk))
+
+    if (aggregateRows.length) {
+      const variabilitySeries = [...aggregateRows]
+        .sort((a, b) => b.cv - a.cv)
+        .slice(0, 12)
+        .map((r) => ({
+          name: r.short,
+          cv: Number(r.cv.toFixed(4)),
+        }))
+
+      out.push({
+        chart_id: 'stats.variability.cv-rank',
+        chart_type: 'bar',
+        library_hint: 'recharts',
+        title: 'Relative Variability (CV) by Column',
+        description: 'Higher coefficient of variation indicates stronger relative spread vs. mean.',
+        data: { series: variabilitySeries },
+        options: { xKey: 'name', yKey: 'cv', color: '#0891b2' },
+        meta: {
+          source: selectedRun?.file_id ? 'file' : 'db',
+          empty_reason: variabilitySeries.length ? null : 'No coefficient of variation values available',
+        },
+      })
+
+      const tailSpreadSeries = [...aggregateRows]
+        .sort((a, b) => b.tailSpread - a.tailSpread)
+        .slice(0, 12)
+        .map((r) => ({
+          name: r.short,
+          spread: Number(r.tailSpread.toFixed(4)),
+          iqr: Number(r.iqr.toFixed(4)),
+        }))
+
+      out.push({
+        chart_id: 'stats.percentile-tail-spread',
+        chart_type: 'bar',
+        library_hint: 'recharts',
+        title: 'P90-P10 Tail Spread by Column',
+        description: 'Compares wide-tail behavior across features; larger spread often signals volatility or mixed populations.',
+        data: { series: tailSpreadSeries },
+        options: {
+          xKey: 'name',
+          seriesKeys: [
+            { key: 'spread', name: 'P90-P10', color: '#7c3aed' },
+            { key: 'iqr', name: 'IQR', color: '#d97706' },
+          ],
+          stacked: false,
+        },
+        meta: {
+          source: selectedRun?.file_id ? 'file' : 'db',
+          empty_reason: tailSpreadSeries.length ? null : 'No percentile spread values available',
+        },
+      })
+
+      const shapeScatter = aggregateRows
+        .map((r) => ({
+          x: Number(r.cv.toFixed(4)),
+          y: Number(r.shapeRisk.toFixed(4)),
+          label: r.name,
+          size: r.pointSize,
+          color: r.shapeRisk >= 0.6 ? '#dc2626' : r.shapeRisk >= 0.35 ? '#d97706' : '#16a34a',
+        }))
+        .slice(0, 80)
+
+      out.push({
+        chart_id: 'stats.variability-vs-shape-risk',
+        chart_type: 'scatter',
+        library_hint: 'plotly',
+        title: 'Variability vs Distribution Shape Risk',
+        description: 'Upper-right quadrant indicates columns with both high relative spread and non-normal shape behavior.',
+        data: { points: shapeScatter },
+        options: {
+          xTitle: 'Coefficient of Variation',
+          yTitle: 'Shape Risk (0-1)',
+        },
+        meta: {
+          source: selectedRun?.file_id ? 'file' : 'db',
+          empty_reason: shapeScatter.length ? null : 'No variability and shape risk points available',
+        },
+      })
+
+      const shapeBuckets = aggregateRows.reduce(
+        (acc, row) => {
+          if (row.shapeRisk >= 0.6) acc.high += 1
+          else if (row.shapeRisk >= 0.35) acc.medium += 1
+          else acc.low += 1
+          return acc
+        },
+        { low: 0, medium: 0, high: 0 }
+      )
+
+      out.push({
+        chart_id: 'stats.shape-risk-distribution',
+        chart_type: 'donut',
+        library_hint: 'recharts',
+        title: 'Distribution Shape Risk Mix',
+        description: 'How many columns are near-normal versus moderately or highly non-normal.',
+        data: {
+          series: [
+            { name: 'Low risk', value: shapeBuckets.low },
+            { name: 'Medium risk', value: shapeBuckets.medium },
+            { name: 'High risk', value: shapeBuckets.high },
+          ],
+        },
+        options: {},
+        meta: {
+          source: selectedRun?.file_id ? 'file' : 'db',
+          empty_reason: aggregateRows.length ? null : 'No shape risk values available',
         },
       })
     }
@@ -914,9 +1147,27 @@ export default function EDAVisualsViewer2({ fileIds = [], dbIds = [], onClose, o
                 <div className="mcard"><div className="text-[10px] text-t3">Z-score anomalies</div><div className="text-[20px] font-sora text-t1">{num(section3Outliers?.summary?.zscore_anomaly_count)}</div></div>
                 <div className="mcard"><div className="text-[10px] text-t3">IQR outliers</div><div className="text-[20px] font-sora text-t1">{num(section3Outliers?.summary?.iqr_outlier_count)}</div></div>
               </div>
+              {section3TopColumns.length > 0 && (
+                <div className="card">
+                  <div className="text-[12px] font-semibold text-t1 mb-2">Top outlier columns with severity badges</div>
+                  <div className="space-y-2">
+                    {section3TopColumns.map((r) => (
+                      <div key={`outlier-badge-${r.column}`} className="flex items-center justify-between gap-3 bg-bg4 border border-dborder rounded-sm px-3 py-2">
+                        <div className="min-w-0">
+                          <div className="text-[11px] text-t1 truncate" title={r.column}>{r.column}</div>
+                          <div className="text-[10px] text-t3 mt-1">IQR {num(r.iqr)} · Z-score {num(r.z)} · Total {num(r.total)}</div>
+                        </div>
+                        <span className="text-[10px] font-semibold px-2 py-1 rounded-full whitespace-nowrap" style={r.badgeStyle}>
+                          {r.severity}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               {section3Charts.length > 0 && (
                 <div className="card">
-                  <div className="text-[12px] font-semibold text-t1 mb-2">Outlier impact ranking</div>
+                  <div className="text-[12px] font-semibold text-t1 mb-2">Outlier prioritization and diagnostics</div>
                   {section3Charts.map((chart) => (
                     <div key={chart.chart_id} className="bg-bg4 border border-dborder rounded-sm px-3 py-2">
                       <div className="text-[11px] text-t1 font-semibold mb-1">{chart.title}</div>
