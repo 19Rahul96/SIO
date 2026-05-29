@@ -14,6 +14,7 @@ function toHeatmapValues(matrix = []) {
 export default function EChartsPanel({ chart }) {
   const type = chart?.chart_type
   const data = chart?.data || {}
+  const panelHeight = Number(chart?.options?.height || 250)
 
   if (type !== 'heatmap') {
     return <div className="text-[11px] text-t3">Unsupported ECharts chart type: {String(type || 'unknown')}</div>
@@ -64,5 +65,5 @@ export default function EChartsPanel({ chart }) {
     ],
   }
 
-  return <ReactECharts option={option} style={{ width: '100%', height: 320 }} notMerge lazyUpdate />
+  return <ReactECharts option={option} style={{ width: '100%', height: panelHeight }} notMerge lazyUpdate />
 }

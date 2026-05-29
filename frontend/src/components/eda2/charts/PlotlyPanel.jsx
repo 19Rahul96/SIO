@@ -3,6 +3,7 @@ import Plot from 'react-plotly.js'
 export default function PlotlyPanel({ chart }) {
   const type = chart?.chart_type
   const data = chart?.data || {}
+  const panelHeight = Number(chart?.options?.height || 250)
 
   if (type === 'scatter') {
     const points = data.points || []
@@ -55,7 +56,7 @@ export default function PlotlyPanel({ chart }) {
           yaxis: { title: chart?.options?.yTitle || '', zeroline: false },
           showlegend: Boolean(ref),
         }}
-        style={{ width: '100%', height: '320px' }}
+        style={{ width: '100%', height: `${panelHeight}px` }}
         config={{ displayModeBar: false, responsive: true }}
       />
     )

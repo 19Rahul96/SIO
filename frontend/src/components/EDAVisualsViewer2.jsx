@@ -1,6 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
 import api from '../services/api'
 import ChartRenderer from './eda2/charts/ChartRenderer'
+
+const DistributionLabPanel = lazy(() => import('./eda2/DistributionLabPanel'))
+const ENABLE_DISTRIBUTION_LAB = String(import.meta.env.VITE_ENABLE_DISTRIBUTION_LAB ?? 'true').toLowerCase() !== 'false'
 
 function pct(n, digits = 1) {
   return `${(Number(n || 0) * 100).toFixed(digits)}%`
@@ -94,6 +97,7 @@ const SECTION_TABS = [
   ['section6', '6. Time Series'],
   ['section7', '7. KG Analytics'],
   ['section8', '8. AI Summary'],
+  ['section9', 'Distribution Lab'],
 ]
 
 export default function EDAVisualsViewer2({ fileIds = [], dbIds = [], onClose, onOpenGraph }) {
@@ -101,6 +105,11 @@ export default function EDAVisualsViewer2({ fileIds = [], dbIds = [], onClose, o
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [tab, setTab] = useState('section1')
+
+  const sectionTabs = useMemo(
+    () => SECTION_TABS.filter(([key]) => ENABLE_DISTRIBUTION_LAB || key !== 'section9'),
+    []
+  )
 
   useEffect(() => {
     setLoading(true)
@@ -782,13 +791,22 @@ export default function EDAVisualsViewer2({ fileIds = [], dbIds = [], onClose, o
     const aggregateRows = Object.entries(stats.columns || {})
       .map(([name, s]) => {
         const meanAbs = Math.abs(Number(s.mean || 0))
+        const mean = Number(s.mean || 0)
+        const median = Number(s.median || 0)
         const std = Number(s.std_dev || 0)
+        const min = Number(s.min ?? s.box?.lower_whisker ?? 0)
+        const max = Number(s.max ?? s.box?.upper_whisker ?? 0)
         const cv = meanAbs > 0 ? std / meanAbs : 0
         const p10 = Number(s.p10 ?? 0)
         const p90 = Number(s.p90 ?? 0)
         const q1 = Number(s.q1 ?? s.box?.q1 ?? 0)
         const q3 = Number(s.q3 ?? s.box?.q3 ?? 0)
+        const leftTail = median - p10
+        const rightTail = p90 - median
+        const centerDelta = mean - median
         const iqr = q3 - q1
+        const range = max - min
+        const rangeToIqr = iqr > 0 ? range / iqr : 0
         const tailSpread = p90 - p10
         const skewAbs = Math.abs(Number(s.skewness || 0))
         const kurtAbs = Math.abs(Number(s.kurtosis || 0))
@@ -796,7 +814,14 @@ export default function EDAVisualsViewer2({ fileIds = [], dbIds = [], onClose, o
         return {
           name,
           short: name.length > 30 ? `${name.slice(0, 27)}...` : name,
+          mean,
+          median,
+          centerDelta,
+          leftTail,
+          rightTail,
           cv,
+          range,
+          rangeToIqr,
           tailSpread,
           iqr,
           skewAbs,
@@ -916,6 +941,143 @@ export default function EDAVisualsViewer2({ fileIds = [], dbIds = [], onClose, o
           empty_reason: aggregateRows.length ? null : 'No shape risk values available',
         },
       })
+
+      const centerDriftSeries = [...aggregateRows]
+        .sort((a, b) => Math.abs(b.centerDelta) - Math.abs(a.centerDelta))
+        .slice(0, 12)
+        .map((r) => ({
+          name: r.short,
+          mean: Number(r.mean.toFixed(4)),
+          median: Number(r.median.toFixed(4)),
+          delta: Number(r.centerDelta.toFixed(4)),
+        }))
+
+      out.push({
+        chart_id: 'stats.center.mean-vs-median',
+        chart_type: 'bar',
+        library_hint: 'recharts',
+        title: 'Center Drift: Mean vs Median',
+        description: 'Highlights columns where center of mass deviates from median, a sign of skew or extreme values.',
+        data: { series: centerDriftSeries },
+        options: {
+          xKey: 'name',
+          seriesKeys: [
+            { key: 'mean', name: 'Mean', color: '#0ea5e9' },
+            { key: 'median', name: 'Median', color: '#d97706' },
+          ],
+          stacked: false,
+        },
+        meta: {
+          source: selectedRun?.file_id ? 'file' : 'db',
+          empty_reason: centerDriftSeries.length ? null : 'No center statistics available',
+        },
+      })
+
+      const tailBalanceSeries = [...aggregateRows]
+        .filter((r) => Number.isFinite(r.leftTail) && Number.isFinite(r.rightTail) && (r.leftTail > 0 || r.rightTail > 0))
+        .sort((a, b) => (b.leftTail + b.rightTail) - (a.leftTail + a.rightTail))
+        .slice(0, 12)
+        .map((r) => ({
+          name: r.short,
+          left_tail: Number(r.leftTail.toFixed(4)),
+          right_tail: Number(r.rightTail.toFixed(4)),
+        }))
+
+      out.push({
+        chart_id: 'stats.tail.left-vs-right',
+        chart_type: 'bar',
+        library_hint: 'recharts',
+        title: 'Tail Balance (P10-Median-P90)',
+        description: 'Compares lower-tail and upper-tail span per column to expose asymmetric risk behavior.',
+        data: { series: tailBalanceSeries },
+        options: {
+          xKey: 'name',
+          seriesKeys: [
+            { key: 'left_tail', name: 'Median-P10', color: '#7c3aed' },
+            { key: 'right_tail', name: 'P90-Median', color: '#16a34a' },
+          ],
+          stacked: false,
+        },
+        meta: {
+          source: selectedRun?.file_id ? 'file' : 'db',
+          empty_reason: tailBalanceSeries.length ? null : 'No percentile tail statistics available',
+        },
+      })
+
+      const rangeAmplificationSeries = [...aggregateRows]
+        .filter((r) => Number.isFinite(r.rangeToIqr) && r.rangeToIqr > 0)
+        .sort((a, b) => b.rangeToIqr - a.rangeToIqr)
+        .slice(0, 12)
+        .map((r) => ({
+          name: r.short,
+          ratio: Number(r.rangeToIqr.toFixed(4)),
+          range: Number(r.range.toFixed(4)),
+          iqr: Number(r.iqr.toFixed(4)),
+        }))
+
+      out.push({
+        chart_id: 'stats.range-to-iqr.amplification',
+        chart_type: 'bar',
+        library_hint: 'recharts',
+        title: 'Range Amplification (Range / IQR)',
+        description: 'Higher ratios indicate tails or outliers stretching total range far beyond core distribution spread.',
+        data: { series: rangeAmplificationSeries },
+        options: { xKey: 'name', yKey: 'ratio', color: '#e11d48' },
+        meta: {
+          source: selectedRun?.file_id ? 'file' : 'db',
+          empty_reason: rangeAmplificationSeries.length ? null : 'No range or IQR statistics available',
+        },
+      })
+
+      const shapeRiskSeries = [...aggregateRows]
+        .sort((a, b) => b.shapeRisk - a.shapeRisk)
+        .slice(0, 12)
+        .map((r) => ({
+          name: r.short,
+          risk: Number(r.shapeRisk.toFixed(4)),
+        }))
+
+      out.push({
+        chart_id: 'stats.shape-risk.rank',
+        chart_type: 'bar',
+        library_hint: 'recharts',
+        title: 'Top Columns by Shape Risk',
+        description: 'Highlights columns whose distribution looks least normal based on skewness and kurtosis signals.',
+        data: { series: shapeRiskSeries },
+        options: { xKey: 'name', yKey: 'risk', color: '#dc2626' },
+        meta: {
+          source: selectedRun?.file_id ? 'file' : 'db',
+          empty_reason: shapeRiskSeries.length ? null : 'No shape risk values available',
+        },
+      })
+
+      const centerTailScatter = [...aggregateRows]
+        .filter((r) => Number.isFinite(r.centerDelta) && Number.isFinite(r.tailSpread))
+        .map((r) => ({
+          x: Math.abs(Number(r.centerDelta.toFixed(4))),
+          y: Number(r.tailSpread.toFixed(4)),
+          label: r.name,
+          size: Math.max(7, Math.min(16, 7 + r.rangeToIqr * 0.8)),
+          color: r.shapeRisk >= 0.6 ? '#dc2626' : r.shapeRisk >= 0.35 ? '#d97706' : '#16a34a',
+        }))
+        .slice(0, 60)
+
+      out.push({
+        chart_id: 'stats.center-drift-vs-tail-spread',
+        chart_type: 'scatter',
+        library_hint: 'plotly',
+        title: 'Center Drift vs Tail Spread',
+        description: 'Columns in the upper-right are both off-center and tail-heavy, which is useful for anomaly triage.',
+        data: { points: centerTailScatter },
+        options: {
+          xTitle: 'Absolute Mean-Median Drift',
+          yTitle: 'P90-P10 Tail Spread',
+        },
+        meta: {
+          source: selectedRun?.file_id ? 'file' : 'db',
+          empty_reason: centerTailScatter.length ? null : 'No center drift and tail spread points available',
+        },
+      })
     }
 
     if (out.length) return out
@@ -966,12 +1128,12 @@ export default function EDAVisualsViewer2({ fileIds = [], dbIds = [], onClose, o
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
+      className="eda2-compact fixed inset-0 z-50 flex items-center justify-center"
       style={{ background: 'rgba(10,12,22,.72)', backdropFilter: 'blur(4px)' }}
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="bg-card2 border border-dborder rounded-card flex flex-col" style={{ width: '1080px', maxWidth: '96vw', maxHeight: '90vh' }}>
-        <div className="flex items-center justify-between px-6 py-4 border-b border-dborder flex-shrink-0">
+      <div className="bg-card2 border border-dborder rounded-card flex flex-col" style={{ width: '1080px', maxWidth: '96vw', maxHeight: '95vh' }}>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-dborder flex-shrink-0">
           <div>
             <div className="font-sora text-[15px] font-semibold text-t1">EDA Visuals2 Enterprise Dashboard</div>
             <div className="text-[11px] text-t3 mt-0.5">Section-wise EDA analytics generated from ingested data and KG artifacts.</div>
@@ -983,7 +1145,7 @@ export default function EDAVisualsViewer2({ fileIds = [], dbIds = [], onClose, o
         </div>
 
         <div className="flex border-b border-dborder flex-shrink-0 overflow-x-auto">
-          {SECTION_TABS.map(([key, label]) => (
+          {sectionTabs.map(([key, label]) => (
             <button
               key={key}
               onClick={() => setTab(key)}
@@ -999,19 +1161,19 @@ export default function EDAVisualsViewer2({ fileIds = [], dbIds = [], onClose, o
           ))}
         </div>
 
-        <div className="px-6 py-3 border-b border-dborder flex items-center gap-2 flex-shrink-0">
+        <div className="px-4 py-2 border-b border-dborder flex items-center gap-2 flex-shrink-0">
           <div className="text-[11px] text-t3">
             Showing visuals for current ingested scope ({fileIds.length} file IDs, {dbIds.length} DB IDs). Latest run is selected automatically.
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 py-5">
+        <div className="flex-1 overflow-y-auto px-4 py-3">
           {loading && <div className="text-[12px] text-t3 text-center py-8">Loading EDA Visuals2...</div>}
           {error && <div className="text-[12px] text-coral text-center py-8">Error: {error}</div>}
           {!loading && !error && !hasRuns && <div className="text-[12px] text-t2 text-center py-10">No EDA artifacts found yet.</div>}
 
           {!loading && !error && hasRuns && selectedRun && tab === 'section1' && (
-            <div className="space-y-4">
+            <div className="space-y-2">
               {contractChartsBySection.kpi_health.length > 0 && (
                 <div className="grid grid-cols-2 gap-3">
                   {contractChartsBySection.kpi_health.map((chart) => (
@@ -1024,7 +1186,7 @@ export default function EDAVisualsViewer2({ fileIds = [], dbIds = [], onClose, o
                 </div>
               )}
 
-              <div className="grid grid-cols-4 gap-3">
+              <div className="grid grid-cols-6 gap-2">
                 <div className="mcard"><div className="text-[10px] text-t3">Total records</div><div className="text-[20px] font-sora text-t1">{num(kpis.total_records)}</div></div>
                 <div className="mcard"><div className="text-[10px] text-t3">Total columns</div><div className="text-[20px] font-sora text-t1">{num(kpis.total_columns)}</div></div>
                 <div className="mcard"><div className="text-[10px] text-t3">Missing %</div><div className="text-[20px] font-sora text-t1">{Number(kpis.missing_pct || 0).toFixed(2)}%</div></div>
@@ -1044,7 +1206,7 @@ export default function EDAVisualsViewer2({ fileIds = [], dbIds = [], onClose, o
                   <div className="text-[12px] font-semibold text-t1 mb-2">Dataset schema tree</div>
                   {(health.schema_tree || []).slice(0, 10).map((t) => (
                     <div key={`${t.schema || 'schema'}.${t.table || 'table'}`} className="mb-2 bg-bg4 border border-dborder rounded-sm px-3 py-2">
-                      <div className="text-[11px] text-t1 font-semibold">{t.table || 'table'} <span className="text-t3">({t.schema || 'n/a'})</span></div>
+                      <div className="text-[10px] text-t1 font-semibold">{t.table || 'table'} <span className="text-t3">({t.schema || 'n/a'})</span></div>
                       <div className="text-[10px] text-t3 mt-1">Columns: {(t.columns || []).length}</div>
                     </div>
                   ))}
@@ -1053,7 +1215,7 @@ export default function EDAVisualsViewer2({ fileIds = [], dbIds = [], onClose, o
 
                 <div className="card">
                   <div className="text-[12px] font-semibold text-t1 mb-2">Datatype distribution</div>
-                  {(health.datatype_distribution || []).slice(0, 10).map((d) => (
+                  {(health.datatype_distribution || []).slice(0, 8).map((d) => (
                     <div key={d.type} className="mb-2">
                       <div className="flex justify-between text-[11px] text-t2"><span>{d.type}</span><span>{num(d.count)}</span></div>
                       <div className="prog-bar"><div className="prog-fill" style={{ width: `${Math.min(100, Number(d.count || 0) * 8)}%`, background: '#2563eb' }} /></div>
@@ -1064,17 +1226,17 @@ export default function EDAVisualsViewer2({ fileIds = [], dbIds = [], onClose, o
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div className="card">
-                  <div className="text-[12px] font-semibold text-t1 mb-2">Completeness and null matrix</div>
-                  <div className="text-[11px] text-t2 mb-1">Complete: {Number(health.completeness?.complete_pct || 0).toFixed(2)}%</div>
-                  <div className="text-[11px] text-t2 mb-1">Missing: {Number(health.completeness?.missing_pct || 0).toFixed(2)}%</div>
-                  <div className="text-[11px] text-t3">Null matrix: high {num(health.completeness?.null_matrix_summary?.high_null_columns)} · medium {num(health.completeness?.null_matrix_summary?.medium_null_columns)} · low {num(health.completeness?.null_matrix_summary?.low_null_columns)}</div>
+                <div className="card px-3 py-3">
+                  <div className="text-[11px] font-semibold text-t1 mb-1.5">Completeness and null matrix</div>
+                  <div className="text-[10px] text-t2 mb-0.5">Complete: {Number(health.completeness?.complete_pct || 0).toFixed(2)}%</div>
+                  <div className="text-[10px] text-t2 mb-0.5">Missing: {Number(health.completeness?.missing_pct || 0).toFixed(2)}%</div>
+                  <div className="text-[10px] text-t3 leading-snug">Null matrix: high {num(health.completeness?.null_matrix_summary?.high_null_columns)} · medium {num(health.completeness?.null_matrix_summary?.medium_null_columns)} · low {num(health.completeness?.null_matrix_summary?.low_null_columns)}</div>
                 </div>
-                <div className="card">
-                  <div className="text-[12px] font-semibold text-t1 mb-2">Health score gauge and duplicate distribution</div>
-                  <div className="text-[22px] font-sora text-t1 mb-2">{scorePct(health.health_score?.score || 0)}</div>
+                <div className="card px-3 py-3">
+                  <div className="text-[11px] font-semibold text-t1 mb-1.5">Health score gauge and duplicate distribution</div>
+                  <div className="text-[18px] font-sora text-t1 leading-none mb-1.5">{scorePct(health.health_score?.score || 0)}</div>
                   {(health.completeness?.duplicate_distribution || []).slice(0, 6).map((d, idx) => (
-                    <div key={`${d.table || 'table'}-${idx}`} className="text-[10px] text-t3">{d.table}: {num(d.duplicate_proxy)}</div>
+                    <div key={`${d.table || 'table'}-${idx}`} className="text-[10px] text-t3 leading-snug">{d.table}: {num(d.duplicate_proxy)}</div>
                   ))}
                 </div>
               </div>
@@ -1082,7 +1244,7 @@ export default function EDAVisualsViewer2({ fileIds = [], dbIds = [], onClose, o
           )}
 
           {!loading && !error && hasRuns && selectedRun && tab === 'section2' && (
-            <div className="space-y-4">
+            <div className="space-y-2">
               {contractChartsBySection.correlation.length > 0 && (
                 <div className="space-y-3">
                   {contractChartsBySection.correlation.map((chart) => (
@@ -1128,7 +1290,7 @@ export default function EDAVisualsViewer2({ fileIds = [], dbIds = [], onClose, o
                   </div>
                   <div className="card">
                     <div className="text-[12px] font-semibold text-t1 mb-2">Correlation pair explorer</div>
-                    {(corr.pair_explorer || []).slice(0, 20).map((p, idx) => (
+                    {(corr.pair_explorer || []).slice(0, 12).map((p, idx) => (
                       <div key={`${p.left}-${p.right}-${idx}`} className="text-[11px] text-t2 mb-1">
                         {p.left} ↔ {p.right} | Pearson {Number(p.pearson || 0).toFixed(3)} | Spearman {Number(p.spearman || 0).toFixed(3)}
                       </div>
@@ -1141,7 +1303,7 @@ export default function EDAVisualsViewer2({ fileIds = [], dbIds = [], onClose, o
           )}
 
           {!loading && !error && hasRuns && selectedRun && tab === 'section3' && (
-            <div className="space-y-4">
+            <div className="space-y-2">
               <div className="grid grid-cols-3 gap-3">
                 <div className="mcard"><div className="text-[10px] text-t3">Affected columns</div><div className="text-[20px] font-sora text-t1">{num(section3Outliers?.summary?.affected_columns)}</div></div>
                 <div className="mcard"><div className="text-[10px] text-t3">Z-score anomalies</div><div className="text-[20px] font-sora text-t1">{num(section3Outliers?.summary?.zscore_anomaly_count)}</div></div>
@@ -1168,18 +1330,46 @@ export default function EDAVisualsViewer2({ fileIds = [], dbIds = [], onClose, o
               {section3Charts.length > 0 && (
                 <div className="card">
                   <div className="text-[12px] font-semibold text-t1 mb-2">Outlier prioritization and diagnostics</div>
-                  {section3Charts.map((chart) => (
-                    <div key={chart.chart_id} className="bg-bg4 border border-dborder rounded-sm px-3 py-2">
-                      <div className="text-[11px] text-t1 font-semibold mb-1">{chart.title}</div>
-                      {chart.description && <div className="text-[10px] text-t3 mb-2">{chart.description}</div>}
-                      <ChartRenderer chart={chart} />
-                    </div>
-                  ))}
+                  {(() => {
+                    const pairedRows = [
+                      new Set(['outliers.impact.ranked', 'outliers.method.split']),
+                      new Set(['outliers.burden.share', 'outliers.method.imbalance']),
+                    ]
+                    const pairedIds = new Set(pairedRows.flatMap((row) => [...row]))
+                    const pairedChartsByRow = pairedRows.map((row) => section3Charts.filter((c) => row.has(c.chart_id)))
+                    const otherCharts = section3Charts.filter((c) => !pairedIds.has(c.chart_id))
+
+                    return (
+                      <>
+                        {pairedChartsByRow.map((rowCharts, rowIndex) => (
+                          rowCharts.length > 0 && (
+                            <div key={`paired-row-${rowIndex}`} className="grid grid-cols-2 gap-2 mb-2">
+                              {rowCharts.map((chart) => (
+                                <div key={chart.chart_id} className="bg-bg4 border border-dborder rounded-sm px-2 py-2">
+                                  <div className="text-[11px] text-t1 font-semibold mb-1">{chart.title}</div>
+                                  {chart.description && <div className="text-[10px] text-t3 mb-1">{chart.description}</div>}
+                                  <ChartRenderer chart={chart} />
+                                </div>
+                              ))}
+                            </div>
+                          )
+                        ))}
+
+                        {otherCharts.map((chart) => (
+                          <div key={chart.chart_id} className="bg-bg4 border border-dborder rounded-sm px-3 py-2 mb-2 last:mb-0">
+                            <div className="text-[11px] text-t1 font-semibold mb-1">{chart.title}</div>
+                            {chart.description && <div className="text-[10px] text-t3 mb-2">{chart.description}</div>}
+                            <ChartRenderer chart={chart} />
+                          </div>
+                        ))}
+                      </>
+                    )
+                  })()}
                 </div>
               )}
               <div className="card">
                 <div className="text-[12px] font-semibold text-t1 mb-2">Box plots and z-score distributions</div>
-                {(section3Outliers.columns || []).slice(0, 15).map((c) => (
+                {(section3Outliers.columns || []).slice(0, 8).map((c) => (
                   <div key={c.column} className="bg-bg4 border border-dborder rounded-sm px-3 py-2 mb-2">
                     <div className="text-[11px] text-t1 truncate">{c.column}</div>
                     <div className="text-[10px] text-t3 mt-1">Box: min {Number(c.box?.lower_whisker || 0).toFixed(2)} · q1 {Number(c.box?.q1 || 0).toFixed(2)} · med {Number(c.box?.median || 0).toFixed(2)} · q3 {Number(c.box?.q3 || 0).toFixed(2)} · max {Number(c.box?.upper_whisker || 0).toFixed(2)}</div>
@@ -1193,22 +1383,22 @@ export default function EDAVisualsViewer2({ fileIds = [], dbIds = [], onClose, o
           )}
 
           {!loading && !error && hasRuns && selectedRun && tab === 'section4' && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-3 gap-3">
-                <div className="mcard"><div className="text-[10px] text-t3">Invalid dates</div><div className="text-[20px] font-sora text-t1">{num(checks.invalid_dates)}</div></div>
-                <div className="mcard"><div className="text-[10px] text-t3">Type mismatches</div><div className="text-[20px] font-sora text-t1">{num(checks.type_mismatches)}</div></div>
-                <div className="mcard"><div className="text-[10px] text-t3">Enum violations</div><div className="text-[20px] font-sora text-t1">{num(checks.enum_violations)}</div></div>
-                <div className="mcard"><div className="text-[10px] text-t3">Null key violations</div><div className="text-[20px] font-sora text-t1">{num(checks.null_key_violations)}</div></div>
-                <div className="mcard"><div className="text-[10px] text-t3">Duplicate entity IDs</div><div className="text-[20px] font-sora text-t1">{num(checks.duplicate_entity_ids)}</div></div>
-                <div className="mcard"><div className="text-[10px] text-t3">Orphan relationships</div><div className="text-[20px] font-sora text-t1">{num(checks.orphan_relationships)}</div></div>
-                <div className="mcard"><div className="text-[10px] text-t3">Foreign key issues</div><div className="text-[20px] font-sora text-t1">{num(checks.foreign_key_issues)}</div></div>
-                <div className="mcard"><div className="text-[10px] text-t3">Schema drift</div><div className="text-[20px] font-sora text-t1">{num(checks.schema_drift)}</div></div>
-                <div className="mcard"><div className="text-[10px] text-t3">Inconsistent labels</div><div className="text-[20px] font-sora text-t1">{num(checks.inconsistent_category_labels)}</div></div>
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2">
+                <div className="mcard px-3 py-2"><div className="text-[9px] text-t3 leading-tight">Invalid dates</div><div className="text-[16px] font-sora text-t1 leading-none mt-1">{num(checks.invalid_dates)}</div></div>
+                <div className="mcard px-3 py-2"><div className="text-[9px] text-t3 leading-tight">Type mismatches</div><div className="text-[16px] font-sora text-t1 leading-none mt-1">{num(checks.type_mismatches)}</div></div>
+                <div className="mcard px-3 py-2"><div className="text-[9px] text-t3 leading-tight">Enum violations</div><div className="text-[16px] font-sora text-t1 leading-none mt-1">{num(checks.enum_violations)}</div></div>
+                <div className="mcard px-3 py-2"><div className="text-[9px] text-t3 leading-tight">Null key violations</div><div className="text-[16px] font-sora text-t1 leading-none mt-1">{num(checks.null_key_violations)}</div></div>
+                <div className="mcard px-3 py-2"><div className="text-[9px] text-t3 leading-tight">Duplicate entity IDs</div><div className="text-[16px] font-sora text-t1 leading-none mt-1">{num(checks.duplicate_entity_ids)}</div></div>
+                <div className="mcard px-3 py-2"><div className="text-[9px] text-t3 leading-tight">Orphan relationships</div><div className="text-[16px] font-sora text-t1 leading-none mt-1">{num(checks.orphan_relationships)}</div></div>
+                <div className="mcard px-3 py-2"><div className="text-[9px] text-t3 leading-tight">Foreign key issues</div><div className="text-[16px] font-sora text-t1 leading-none mt-1">{num(checks.foreign_key_issues)}</div></div>
+                <div className="mcard px-3 py-2"><div className="text-[9px] text-t3 leading-tight">Schema drift</div><div className="text-[16px] font-sora text-t1 leading-none mt-1">{num(checks.schema_drift)}</div></div>
+                <div className="mcard px-3 py-2"><div className="text-[9px] text-t3 leading-tight">Inconsistent labels</div><div className="text-[16px] font-sora text-t1 leading-none mt-1">{num(checks.inconsistent_category_labels)}</div></div>
               </div>
 
               <div className="card">
                 <div className="text-[12px] font-semibold text-t1 mb-2">Validation error table</div>
-                {(checks.errors || []).slice(0, 20).map((e, idx) => (
+                {(checks.errors || []).slice(0, 10).map((e, idx) => (
                   <div key={`${e.table || 't'}-${e.column || 'c'}-${idx}`} className="text-[11px] text-t2 mb-1">
                     {e.table}.{e.column} · {e.check} · count {num(e.count)} · severity {e.severity}
                   </div>
@@ -1226,13 +1416,13 @@ export default function EDAVisualsViewer2({ fileIds = [], dbIds = [], onClose, o
           )}
 
           {!loading && !error && hasRuns && selectedRun && tab === 'section5' && (
-            <div className="space-y-4">
+            <div className="space-y-2">
               <div className="card">
                 <div className="text-[12px] font-semibold text-t1 mb-2">Statistical distributions and spread</div>
                 {!stats.available && <div className="text-[11px] text-t3">Statistical analysis unavailable for this run.</div>}
                 {stats.available && section5Charts.length > 0 && (
-                  <div className="grid grid-cols-2 gap-3 mb-3">
-                    {section5Charts.map((chart) => (
+                  <div className="grid grid-cols-3 gap-2 mb-2">
+                    {section5Charts.slice(0, 9).map((chart) => (
                       <div key={chart.chart_id} className="bg-bg4 border border-dborder rounded-sm px-3 py-2">
                         <div className="text-[11px] text-t1 font-semibold mb-1">{chart.title}</div>
                         {chart.description && <div className="text-[10px] text-t3 mb-2">{chart.description}</div>}
@@ -1241,7 +1431,7 @@ export default function EDAVisualsViewer2({ fileIds = [], dbIds = [], onClose, o
                     ))}
                   </div>
                 )}
-                {stats.available && Object.entries(stats.columns || {}).slice(0, 14).map(([name, s]) => (
+                {stats.available && Object.entries(stats.columns || {}).slice(0, 8).map(([name, s]) => (
                   <div key={name} className="bg-bg4 border border-dborder rounded-sm px-3 py-2 mb-2">
                     <div className="text-[11px] text-t1 truncate">{name}</div>
                     <div className="text-[10px] text-t3 mt-1">mean {Number(s.mean || 0).toFixed(3)} · median {Number(s.median || 0).toFixed(3)} · var {Number(s.variance || 0).toFixed(3)} · std {Number(s.std_dev || 0).toFixed(3)}</div>
@@ -1255,7 +1445,7 @@ export default function EDAVisualsViewer2({ fileIds = [], dbIds = [], onClose, o
           )}
 
           {!loading && !error && hasRuns && selectedRun && tab === 'section6' && (
-            <div className="space-y-4">
+            <div className="space-y-2">
               {contractChartsBySection.time_series.length > 0 && (
                 <div className="space-y-3">
                   {contractChartsBySection.time_series.map((chart) => (
@@ -1280,7 +1470,7 @@ export default function EDAVisualsViewer2({ fileIds = [], dbIds = [], onClose, o
                   <div className="card">
                     <div className="text-[12px] font-semibold text-t1 mb-2">Event spikes and change points</div>
                     <div className="text-[11px] text-t3 mb-2">Event spikes: {num((series.event_spikes || []).length)}</div>
-                    {(series.event_spikes || []).slice(0, 12).map((s, idx) => (
+                    {(series.event_spikes || []).slice(0, 8).map((s, idx) => (
                       <div key={`${s.date || 'spike'}-${idx}`} className="text-[11px] text-t2 mb-1">{s.date} · count {num(s.count)} · z-proxy {Number(s.z_proxy || 0).toFixed(2)}</div>
                     ))}
                     <div className="text-[11px] text-t3 mt-2">Change points detected: {num(changePoints.length)}</div>
@@ -1291,7 +1481,7 @@ export default function EDAVisualsViewer2({ fileIds = [], dbIds = [], onClose, o
           )}
 
           {!loading && !error && hasRuns && selectedRun && tab === 'section7' && (
-            <div className="space-y-4">
+            <div className="space-y-2">
               <div className="card">
                 <div className="flex items-center justify-between mb-2">
                   <div className="text-[12px] font-semibold text-t1">Knowledge graph analytics</div>
@@ -1306,13 +1496,13 @@ export default function EDAVisualsViewer2({ fileIds = [], dbIds = [], onClose, o
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <div className="text-[11px] text-t3 mb-1 uppercase tracking-wider font-semibold">Entity frequency distribution</div>
-                    {(kg.entity_distribution || selectedRun.entity_distribution || []).slice(0, 10).map((e) => (
+                    {(kg.entity_distribution || selectedRun.entity_distribution || []).slice(0, 6).map((e) => (
                       <div key={e.type} className="mb-1 text-[11px] text-t2">{e.type}: {num(e.count)}</div>
                     ))}
                   </div>
                   <div>
                     <div className="text-[11px] text-t3 mb-1 uppercase tracking-wider font-semibold">Relationship type distribution</div>
-                    {(kg.relationship_distribution || selectedRun.relation_distributions || []).slice(0, 10).map((r, idx) => (
+                    {(kg.relationship_distribution || selectedRun.relation_distributions || []).slice(0, 6).map((r, idx) => (
                       <div key={`${r.relation || r.joinability || 'rel'}-${idx}`} className="mb-1 text-[11px] text-t2">{r.relation || r.joinability}: {num(r.count)}</div>
                     ))}
                   </div>
@@ -1325,10 +1515,10 @@ export default function EDAVisualsViewer2({ fileIds = [], dbIds = [], onClose, o
           )}
 
           {!loading && !error && hasRuns && selectedRun && tab === 'section8' && (
-            <div className="space-y-4">
+            <div className="space-y-2">
               <div className="card">
                 <div className="text-[12px] font-semibold text-t1 mb-2">Deterministic executive insights</div>
-                {insights.map((i, idx) => (
+                {insights.slice(0, 4).map((i, idx) => (
                   <div key={`insight-${idx}`} className="bg-bg4 border border-dborder rounded-sm px-3 py-2 mb-2">
                     <div className="text-[11px] text-t1">{i.message}</div>
                     <div className="text-[10px] text-t3 mt-1">Severity: {i.severity || 'n/a'} · Confidence: {Number(i.confidence || 0).toFixed(2)}</div>
@@ -1348,6 +1538,23 @@ export default function EDAVisualsViewer2({ fileIds = [], dbIds = [], onClose, o
                 </div>
               </div>
             </div>
+          )}
+
+          {!loading && !error && hasRuns && selectedRun && ENABLE_DISTRIBUTION_LAB && tab === 'section9' && (
+            <Suspense fallback={<div className="text-[12px] text-t3 text-center py-8">Loading Distribution Lab...</div>}>
+              <DistributionLabPanel
+                runs={runs}
+                selectedRun={selectedRun}
+                stats={stats}
+                corr={corr}
+                outliers={outliers}
+                kpis={kpis}
+                checks={checks}
+                kg={kg}
+                insights={insights}
+                caps={caps}
+              />
+            </Suspense>
           )}
         </div>
       </div>

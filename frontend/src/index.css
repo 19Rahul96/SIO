@@ -129,3 +129,20 @@ body {
 .gap-3 {
   gap: 3.75rem;
 }
+
+.eda2-compact .card {
+  padding: 0.65rem;
+}
+
+.eda2-compact .mcard {
+  padding: 0.55rem 0.7rem;
+}
+
+.eda2-compact .mcard .font-sora {
+  font-size: 16px !important;
+  line-height: 1.1;
+}
+
+.eda2-compact .btn-sm {
+  padding: 0.2rem 0.5rem;
+}

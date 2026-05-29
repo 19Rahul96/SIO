@@ -20,6 +20,7 @@ const PIE_COLORS = ['#2563eb', '#d97706', '#16a34a', '#e11d48']
 export default function RechartsPanel({ chart }) {
   const type = chart?.chart_type
   const data = chart?.data || {}
+  const panelHeight = Number(chart?.options?.height || 210)
 
   if (type === 'bar') {
     const series = data.series || []
@@ -30,7 +31,7 @@ export default function RechartsPanel({ chart }) {
     const stacked = Boolean(chart?.options?.stacked)
     if (!series.length) return <div className="text-[11px] text-t3">{chart?.meta?.empty_reason || 'No bar data available.'}</div>
     return (
-      <div style={{ width: '100%', height: 260 }}>
+      <div style={{ width: '100%', height: panelHeight }}>
         <ResponsiveContainer>
           <BarChart data={series}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(100,116,139,.2)" />
@@ -63,7 +64,7 @@ export default function RechartsPanel({ chart }) {
     const yKey = chart?.options?.yKey || 'count'
     if (!series.length) return <div className="text-[11px] text-t3">{chart?.meta?.empty_reason || 'No line data available.'}</div>
     return (
-      <div style={{ width: '100%', height: 260 }}>
+      <div style={{ width: '100%', height: panelHeight }}>
         <ResponsiveContainer>
           <LineChart data={series}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(100,116,139,.2)" />
@@ -81,7 +82,7 @@ export default function RechartsPanel({ chart }) {
     const series = data.series || []
     if (!series.length) return <div className="text-[11px] text-t3">{chart?.meta?.empty_reason || 'No donut data available.'}</div>
     return (
-      <div style={{ width: '100%', height: 260 }}>
+      <div style={{ width: '100%', height: panelHeight }}>
         <ResponsiveContainer>
           <PieChart>
             <Pie data={series} dataKey="value" nameKey="name" innerRadius={55} outerRadius={85}>
@@ -100,7 +101,7 @@ export default function RechartsPanel({ chart }) {
     const value = Number(data.value || 0)
     const gaugeData = [{ name: chart?.title || 'score', value: Math.max(0, Math.min(1, value)) * 100, fill: '#16a34a' }]
     return (
-      <div style={{ width: '100%', height: 260 }}>
+      <div style={{ width: '100%', height: panelHeight }}>
         <ResponsiveContainer>
           <RadialBarChart
             cx="50%"
