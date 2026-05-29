@@ -252,11 +252,25 @@ export default function EDAVisualsViewer2({ fileIds = [], dbIds = [], onClose, o
       || Object.keys(statsColumns).length
       || Object.keys(statsHistograms).length
     )
+    // Map columns to featureRows for DistributionLabPanel
+    let featureRows = [];
+    if (statsColumns && typeof statsColumns === 'object') {
+      featureRows = Object.entries(statsColumns).map(([name, stat]) => ({
+        name,
+        skew: stat.skewness ?? 0,
+        kurt: stat.kurtosis ?? 0,
+        outlierTotal: (stat.outliers_iqr_count ?? 0) + (stat.outliers_zscore_count ?? 0),
+        risk: Math.abs(stat.skewness ?? 0) + Math.abs(stat.kurtosis ?? 0), // crude risk proxy
+        ...stat,
+      }))
+    }
+
     const statsMerged = {
       ...runStats,
       available: statsAvailable,
       columns: statsColumns,
       histograms: statsHistograms,
+      featureRows,
     }
 
     const kgMerged = run.kg_analytics || {

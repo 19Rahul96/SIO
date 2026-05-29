@@ -1,0 +1,578 @@
+
+<h2 class="sr-only">Enterprise EDA platform — 8 tabs covering univariate, bivariate, and multivariate analysis with full chart suite.</h2>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+.nav{display:flex;border-bottom:0.5px solid var(--color-border-tertiary);margin-bottom:1.25rem;overflow-x:auto;flex-wrap:nowrap;gap:0}
+.nb{padding:8px 12px;font-size:12px;border:none;background:transparent;color:var(--color-text-secondary);cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent;font-weight:400}
+.nb.on{color:var(--color-text-primary);border-bottom-color:#185FA5;font-weight:500}
+.tab{display:none}.tab.on{display:block}
+.sp{display:grid;grid-template-columns:1fr 290px;gap:1rem;align-items:start}
+.p{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:.9rem 1rem;margin-bottom:.85rem}
+.p:last-child{margin-bottom:0}
+.pt{font-size:11px;font-weight:500;color:var(--color-text-secondary);margin-bottom:.7rem;text-transform:uppercase;letter-spacing:.04em}
+.krow{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:1rem}
+.kc{background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:.7rem .9rem}
+.kl{font-size:11px;color:var(--color-text-secondary);margin-bottom:3px}
+.kv{font-size:19px;font-weight:500;color:var(--color-text-primary)}
+.ks{font-size:11px;margin-top:2px}
+.pill{display:inline-block;padding:2px 7px;border-radius:20px;font-size:11px;font-weight:500}
+.pg{background:#EAF3DE;color:#3B6D11}.pa{background:#FAEEDA;color:#854F0B}.pr{background:#FCEBEB;color:#A32D2D}.pi{background:#E6F1FB;color:#0C447C}
+.ir{border-left:3px solid;padding:6px 10px;margin-bottom:6px;border-radius:0 var(--border-radius-md) var(--border-radius-md) 0}
+.ir:last-child{margin-bottom:0}
+.iw{border-color:#BA7517;background:#FAEEDA44}.ii{border-color:#185FA5;background:#E6F1FB44}.io{border-color:#3B6D11;background:#EAF3DE44}.ird{border-color:#A32D2D;background:#FCEBEB44}
+.il{font-size:10px;font-weight:500;color:var(--color-text-secondary);margin-bottom:2px}
+.it{font-size:12px;color:var(--color-text-primary)}
+.mb{margin-bottom:7px}
+.mbl{display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px;color:var(--color-text-primary)}
+.mbt{height:7px;background:var(--color-background-secondary);border-radius:4px;overflow:hidden}
+.mbf{height:100%;border-radius:4px}
+.stabs{display:flex;gap:6px;margin-bottom:.85rem;flex-wrap:wrap}
+.sb{padding:4px 12px;font-size:11px;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);background:transparent;color:var(--color-text-secondary);cursor:pointer}
+.sb.on{background:var(--color-background-secondary);color:var(--color-text-primary);font-weight:500}
+.badge{padding:2px 7px;border-radius:20px;font-size:10px;font-weight:500}
+.bdet{background:#EAF3DE;color:#3B6D11}.bstat{background:#E6F1FB;color:#0C447C}.bai{background:#EEEDFE;color:#3C3489}
+.aq{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:4px;height:190px}
+.aqc{border-radius:var(--border-radius-md);padding:8px;display:flex;flex-direction:column;justify-content:space-between}
+.aqchip{background:var(--color-background-primary);border:0.5px solid var(--color-border-secondary);border-radius:20px;padding:3px 7px;font-size:10px;margin:2px 0;color:var(--color-text-primary);display:inline-block}
+</style>
+
+<div class="nav" id="nav">
+  <button class="nb on" onclick="ST(0)">1 — Intelligence brief</button>
+  <button class="nb" onclick="ST(1)">2 — Trust & quality</button>
+  <button class="nb" onclick="ST(2)">3 — Distribution lab</button>
+  <button class="nb" onclick="ST(3)">4 — Dependency map</button>
+  <button class="nb" onclick="ST(4)">5 — Anomaly radar</button>
+  <button class="nb" onclick="ST(5)">6 — Temporal signal</button>
+  <button class="nb" onclick="ST(6)">7 — Knowledge graph</button>
+  <button class="nb" onclick="ST(7)">8 — AI brief</button>
+</div>
+
+<div id="t0" class="tab on">
+  <div class="krow">
+    <div class="kc"><div class="kl">Health score</div><div class="kv">74<span style="font-size:13px;color:var(--color-text-secondary)">/100</span></div><div class="ks"><span class="pill pa">moderate</span></div></div>
+    <div class="kc"><div class="kl">Completeness</div><div class="kv">91<span style="font-size:13px;color:var(--color-text-secondary)">%</span></div><div class="ks"><span class="pill pg">good</span></div></div>
+    <div class="kc"><div class="kl">Anomalies</div><div class="kv">247</div><div class="ks"><span class="pill pr">high</span></div></div>
+    <div class="kc"><div class="kl">Duplicates</div><div class="kv">1.2<span style="font-size:13px;color:var(--color-text-secondary)">%</span></div><div class="ks"><span class="pill pg">low</span></div></div>
+  </div>
+  <div class="sp">
+    <div>
+      <div class="p"><div class="pt">Data DNA — quality radar</div><div style="position:relative;height:210px"><canvas id="c_radar" role="img" aria-label="Quality radar chart across 6 dimensions">Radar chart.</canvas></div></div>
+      <div class="p"><div class="pt">Schema topology</div><canvas id="c_topo" style="width:100%;height:130px" role="img" aria-label="Schema topology graph">Topology graph.</canvas></div>
+    </div>
+    <div>
+      <div class="p"><div class="pt">AI-ranked signals</div>
+        <div class="ir ird"><div class="il">CRITICAL · 94%</div><div class="it">Systematic nulls in income+debt — ETL failure</div></div>
+        <div class="ir iw"><div class="il">HIGH · 81%</div><div class="it">Income↔Credit multicollinearity r=0.87</div></div>
+        <div class="ir ii"><div class="il">MEDIUM · 76%</div><div class="it">Age distribution bimodal — segmentation signal</div></div>
+        <div class="ir io"><div class="il">LOW · deterministic</div><div class="it">1,204 exact duplicates — safe to deduplicate</div></div>
+      </div>
+      <div class="p"><div class="pt">Quality dimensions</div>
+        <div class="mb"><div class="mbl"><span>Completeness</span><span>91%</span></div><div class="mbt"><div class="mbf" style="width:91%;background:#3B6D11"></div></div></div>
+        <div class="mb"><div class="mbl"><span>Validity</span><span>78%</span></div><div class="mbt"><div class="mbf" style="width:78%;background:#BA7517"></div></div></div>
+        <div class="mb"><div class="mbl"><span>Uniqueness</span><span>98.8%</span></div><div class="mbt"><div class="mbf" style="width:98.8%;background:#3B6D11"></div></div></div>
+        <div class="mb"><div class="mbl"><span>Consistency</span><span>63%</span></div><div class="mbt"><div class="mbf" style="width:63%;background:#A32D2D"></div></div></div>
+        <div class="mb"><div class="mbl"><span>Timeliness</span><span>85%</span></div><div class="mbt"><div class="mbf" style="width:85%;background:#185FA5"></div></div></div>
+        <div class="mb" style="margin-bottom:0"><div class="mbl"><span>Integrity</span><span>72%</span></div><div class="mbt"><div class="mbf" style="width:72%;background:#BA7517"></div></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="t1" class="tab">
+  <div class="sp">
+    <div>
+      <div class="p"><div class="pt">Quality matrix — columns × dimensions</div><div id="qmat"></div></div>
+      <div class="p"><div class="pt">Rule compliance waterfall</div><div style="position:relative;height:195px"><canvas id="c_wfall" role="img" aria-label="Rule compliance waterfall chart">Waterfall.</canvas></div></div>
+    </div>
+    <div>
+      <div class="p"><div class="pt">Validation issues</div>
+        <div class="ir ird"><div class="il">TYPE MISMATCH</div><div class="it">date_of_birth: 342 not ISO-8601</div></div>
+        <div class="ir ird"><div class="il">CONSTRAINT FAIL</div><div class="it">balance: 89 negative values violate ≥0</div></div>
+        <div class="ir iw"><div class="il">ENUM VIOLATION</div><div class="it">status: 17 unknown values</div></div>
+        <div class="ir iw"><div class="il">DUPLICATE</div><div class="it">1,204 exact record duplicates</div></div>
+        <div class="ir io"><div class="il">SCHEMA</div><div class="it">All 12 required columns present</div></div>
+      </div>
+      <div class="p"><div class="pt">Severity distribution</div>
+        <div style="position:relative;height:115px"><canvas id="c_sev" role="img" aria-label="Severity donut chart">Severity.</canvas></div>
+        <div style="display:flex;gap:10px;margin-top:8px;font-size:11px;color:var(--color-text-secondary);flex-wrap:wrap">
+          <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#E24B4A"></span>Critical 18%</span>
+          <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#EF9F27"></span>High 31%</span>
+          <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#378ADD"></span>Medium 34%</span>
+          <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#639922"></span>Low 17%</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="t2" class="tab">
+  <div class="stabs">
+    <button class="sb on" id="sb_uni" onclick="setDist('uni',this)">Univariate</button>
+    <button class="sb" id="sb_bi" onclick="setDist('bi',this)">Bivariate</button>
+    <button class="sb" id="sb_mv" onclick="setDist('mv',this)">Multivariate</button>
+  </div>
+
+  <div id="dist_uni">
+    <div class="sp">
+      <div>
+        <div class="p"><div class="pt">Histograms — frequency distribution</div><div style="position:relative;height:195px"><canvas id="c_hist" role="img" aria-label="Histogram of Income distribution">Histogram.</canvas></div>
+          <div style="display:flex;gap:8px;margin-top:6px;font-size:11px">
+            <span style="color:var(--color-text-secondary)">Column:</span>
+            <select id="histCol" onchange="updateHist()" style="font-size:11px;padding:2px 6px;border:0.5px solid var(--color-border-secondary);border-radius:4px;background:var(--color-background-primary);color:var(--color-text-primary)">
+              <option>Income</option><option>Age</option><option>Balance</option><option>Credit Score</option><option>Risk Score</option><option>Tenure</option>
+            </select>
+          </div>
+        </div>
+        <div class="p"><div class="pt">Box plots — spread & outliers</div><canvas id="c_box" style="width:100%;height:130px" role="img" aria-label="Box plots for all columns">Box plots.</canvas></div>
+      </div>
+      <div>
+        <div class="p"><div class="pt">Skewness & outlier scatter</div><div style="position:relative;height:210px"><canvas id="c_skewout" role="img" aria-label="Scatter plot of skewness versus outlier count per column">Skewness vs outliers.</canvas></div></div>
+        <div class="p"><div class="pt">Distribution profiles</div>
+          <div class="ir iw"><div class="il">BIMODAL</div><div class="it">Age — two peaks at 28 & 54, possible segment</div></div>
+          <div class="ir ird"><div class="il">HEAVY TAIL</div><div class="it">Income — leptokurtic k=5.2, extreme outlier risk</div></div>
+          <div class="ir ii"><div class="il">RIGHT SKEW</div><div class="it">Balance — skewness 2.1, log-transform suggested</div></div>
+          <div class="ir io"><div class="il">NEAR NORMAL</div><div class="it">Credit Score — skew 0.12, kurtosis 2.9</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="dist_bi" style="display:none">
+    <div class="sp">
+      <div>
+        <div class="p"><div class="pt">Num vs num — scatter plot</div><div style="position:relative;height:195px"><canvas id="c_scatter" role="img" aria-label="Scatter plot of Income vs Credit Score">Scatter.</canvas></div>
+          <div style="display:flex;gap:6px;margin-top:6px;font-size:11px;align-items:center">
+            <span style="color:var(--color-text-secondary)">X:</span>
+            <select id="scX" onchange="updateScatter()" style="font-size:11px;padding:2px 6px;border:0.5px solid var(--color-border-secondary);border-radius:4px;background:var(--color-background-primary);color:var(--color-text-primary)"><option>Income</option><option>Age</option><option>Debt</option><option>Balance</option></select>
+            <span style="color:var(--color-text-secondary)">Y:</span>
+            <select id="scY" onchange="updateScatter()" style="font-size:11px;padding:2px 6px;border:0.5px solid var(--color-border-secondary);border-radius:4px;background:var(--color-background-primary);color:var(--color-text-primary)"><option>Credit Score</option><option>Risk Score</option><option>Balance</option><option>Tenure</option></select>
+          </div>
+        </div>
+        <div class="p"><div class="pt">Num vs categorical — violin / box</div><div style="position:relative;height:140px"><canvas id="c_violin" role="img" aria-label="Box plots of Income by customer segment">Income by segment.</canvas></div></div>
+      </div>
+      <div>
+        <div class="p"><div class="pt">Categorical vs categorical — stacked bar</div><div style="position:relative;height:160px"><canvas id="c_stacked" role="img" aria-label="Stacked bar chart of Status by Risk Level">Stacked bar.</canvas></div></div>
+        <div class="p"><div class="pt">Cross-tabulation</div>
+          <table style="width:100%;font-size:11px;border-collapse:collapse">
+            <tr style="color:var(--color-text-secondary)"><th style="text-align:left;padding:3px 0;font-weight:500">Status ↓ / Risk →</th><th style="text-align:right;padding:3px 4px;font-weight:500">Low</th><th style="text-align:right;padding:3px 4px;font-weight:500">Medium</th><th style="text-align:right;padding:3px 0;font-weight:500">High</th></tr>
+            <tr style="border-top:0.5px solid var(--color-border-tertiary)"><td style="padding:3px 0;color:var(--color-text-primary)">Active</td><td style="text-align:right;padding:3px 4px">1,240</td><td style="text-align:right;padding:3px 4px">680</td><td style="text-align:right">142</td></tr>
+            <tr style="border-top:0.5px solid var(--color-border-tertiary)"><td style="padding:3px 0">Inactive</td><td style="text-align:right;padding:3px 4px">430</td><td style="text-align:right;padding:3px 4px">290</td><td style="text-align:right">87</td></tr>
+            <tr style="border-top:0.5px solid var(--color-border-tertiary)"><td style="padding:3px 0">Pending</td><td style="text-align:right;padding:3px 4px">180</td><td style="text-align:right;padding:3px 4px">95</td><td style="text-align:right;color:#A32D2D">31</td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="dist_mv" style="display:none">
+    <div class="sp">
+      <div>
+        <div class="p"><div class="pt">Pair plot — multi-feature scatter grid</div><canvas id="c_pair" style="width:100%;height:260px" role="img" aria-label="Pair plot grid of 4 features">Pair plot.</canvas></div>
+        <div class="p"><div class="pt">Grouped bar — classes by feature</div><div style="position:relative;height:145px"><canvas id="c_grouped" role="img" aria-label="Grouped bar chart of mean values per risk segment">Grouped bar.</canvas></div></div>
+      </div>
+      <div>
+        <div class="p"><div class="pt">PCA — 2D projection</div><div style="position:relative;height:210px"><canvas id="c_pca" role="img" aria-label="PCA 2D scatter showing 3 customer segments">PCA scatter.</canvas></div>
+          <div style="display:flex;gap:10px;margin-top:6px;font-size:11px;color:var(--color-text-secondary)">
+            <span style="display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:#185FA5"></span>Segment A</span>
+            <span style="display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:#3B6D11"></span>Segment B</span>
+            <span style="display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:#A32D2D"></span>Segment C</span>
+          </div>
+        </div>
+        <div class="p"><div class="pt">Dimensionality reduction</div>
+          <div class="ir ii"><div class="il">PCA VARIANCE EXPLAINED</div><div class="it">PC1: 44% · PC2: 22% · total 66% in 2D</div></div>
+          <div class="ir io"><div class="il">CLUSTER SEPARATION</div><div class="it">Segment A & C well-separated — distinct profiles</div></div>
+          <div class="ir iw"><div class="il">OVERLAP</div><div class="it">Segment B overlaps A — possible mixed segment</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="t3" class="tab">
+  <div class="stabs">
+    <button class="sb on" id="cbP" onclick="setCorr('pearson',this)">Pearson</button>
+    <button class="sb" id="cbS" onclick="setCorr('spearman',this)">Spearman</button>
+    <button class="sb" id="cbM" onclick="setCorr('mic',this)">MIC</button>
+  </div>
+  <div class="sp">
+    <div>
+      <div class="p"><div class="pt">Correlation heatmap</div>
+        <div style="position:relative" id="hwrap"><canvas id="c_heat" role="img" aria-label="Correlation heatmap">Heatmap.</canvas><div id="htip" style="position:absolute;background:var(--color-background-primary);border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);padding:6px 10px;font-size:11px;display:none;pointer-events:none;z-index:10"></div></div>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:7px"><span style="font-size:11px;color:var(--color-text-secondary)">-1</span><div id="hleg" style="flex:1;height:10px;border-radius:3px"></div><span style="font-size:11px;color:var(--color-text-secondary)">+1</span></div>
+      </div>
+      <div class="p"><div class="pt">VIF — multicollinearity ranking</div><div style="position:relative;height:175px"><canvas id="c_vif" role="img" aria-label="VIF horizontal bar chart">VIF.</canvas></div></div>
+    </div>
+    <div>
+      <div class="p"><div class="pt">Top correlations</div><div id="corrSig"></div></div>
+      <div class="p"><div class="pt">Partial correlation</div>
+        <div class="ir ii"><div class="il">DIRECT LINK</div><div class="it">Income → Credit Score: partial r = 0.41</div></div>
+        <div class="ir iw"><div class="il">MEDIATED</div><div class="it">Debt → Balance: partial r = 0.09 via Income</div></div>
+        <div class="ir io"><div class="il">INDEPENDENT</div><div class="it">Tenure ↔ Risk Score: partial r = 0.02</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="t4" class="tab">
+  <div class="sp">
+    <div>
+      <div class="p"><div class="pt">Impact quadrant — severity vs business impact</div><div style="position:relative;height:220px"><canvas id="c_bubble" role="img" aria-label="Anomaly impact quadrant bubble chart">Bubble chart.</canvas></div></div>
+      <div class="p"><div class="pt">Parallel coordinates — multivariate anomalies</div><canvas id="c_para" style="width:100%;height:125px" role="img" aria-label="Parallel coordinates chart">Parallel coordinates.</canvas></div>
+    </div>
+    <div>
+      <div class="p"><div class="pt">Anomaly explanations</div>
+        <div class="ir ird"><div class="il">Z-SCORE · INVESTIGATE NOW</div><div class="it">Income: 47 records 4σ+ — possible fraud</div></div>
+        <div class="ir ird"><div class="il">IQR · HIGH IMPACT</div><div class="it">Balance: 89 negatives — constraint violation</div></div>
+        <div class="ir iw"><div class="il">MULTIVARIATE</div><div class="it">12 records: high Income + low Credit + high Debt</div></div>
+        <div class="ir ii"><div class="il">CLUSTER</div><div class="it">34 records share identical null pattern</div></div>
+      </div>
+      <div class="p"><div class="pt">Detection reliability</div>
+        <table style="width:100%;font-size:11px;border-collapse:collapse">
+          <tr style="color:var(--color-text-secondary)"><th style="text-align:left;padding:3px 0;font-weight:500">Column</th><th style="text-align:right;font-weight:500">Method</th><th style="text-align:right;font-weight:500">Trust</th></tr>
+          <tr style="border-top:0.5px solid var(--color-border-tertiary)"><td style="padding:3px 0">Income</td><td style="text-align:right">Z-score</td><td style="text-align:right"><span class="pill pg">high</span></td></tr>
+          <tr style="border-top:0.5px solid var(--color-border-tertiary)"><td style="padding:3px 0">Balance</td><td style="text-align:right">IQR</td><td style="text-align:right"><span class="pill pg">high</span></td></tr>
+          <tr style="border-top:0.5px solid var(--color-border-tertiary)"><td style="padding:3px 0">Risk Score</td><td style="text-align:right">IQR</td><td style="text-align:right"><span class="pill pa">medium</span></td></tr>
+          <tr style="border-top:0.5px solid var(--color-border-tertiary)"><td style="padding:3px 0">Txn Count</td><td style="text-align:right">Multivariate</td><td style="text-align:right"><span class="pill pa">medium</span></td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="t5" class="tab">
+  <div class="sp">
+    <div>
+      <div class="p"><div class="pt">Trend component</div><div style="position:relative;height:85px"><canvas id="c_trend" role="img" aria-label="Trend line">Trend.</canvas></div></div>
+      <div class="p"><div class="pt">Seasonality component</div><div style="position:relative;height:80px"><canvas id="c_seas" role="img" aria-label="Seasonality bars">Seasonality.</canvas></div></div>
+      <div class="p"><div class="pt">Residual / noise</div><div style="position:relative;height:80px"><canvas id="c_res" role="img" aria-label="Residual chart">Residual.</canvas></div></div>
+    </div>
+    <div>
+      <div class="p"><div class="pt">PSI drift gauge</div>
+        <canvas id="c_gauge" style="width:100%;height:125px" role="img" aria-label="PSI gauge">PSI gauge.</canvas>
+        <div style="text-align:center;margin-top:4px"><div style="font-size:20px;font-weight:500;color:var(--color-text-primary)">0.14</div><div style="font-size:11px;color:#854F0B;font-weight:500">monitor zone</div></div>
+        <div style="display:flex;gap:8px;margin-top:6px;font-size:10px;justify-content:center;color:var(--color-text-secondary)">
+          <span style="color:#3B6D11">■ stable &lt;0.10</span><span style="color:#854F0B">■ monitor 0.10–0.20</span><span style="color:#A32D2D">■ drift &gt;0.20</span>
+        </div>
+      </div>
+      <div class="p"><div class="pt">Column PSI drift</div>
+        <div class="mb"><div class="mbl"><span>Income</span><span style="color:#A32D2D">0.24</span></div><div class="mbt"><div class="mbf" style="width:80%;background:#A32D2D"></div></div></div>
+        <div class="mb"><div class="mbl"><span>Balance</span><span style="color:#854F0B">0.14</span></div><div class="mbt"><div class="mbf" style="width:47%;background:#EF9F27"></div></div></div>
+        <div class="mb"><div class="mbl"><span>Risk Score</span><span style="color:#854F0B">0.11</span></div><div class="mbt"><div class="mbf" style="width:37%;background:#EF9F27"></div></div></div>
+        <div><div class="mbl"><span>Age</span><span>0.04</span></div><div class="mbt"><div class="mbf" style="width:13%;background:#639922"></div></div></div>
+      </div>
+      <div class="p"><div class="pt">Spike detection</div>
+        <div class="ir ird"><div class="il">SPIKE · 2024-11-03</div><div class="it">Txn Count +340% — campaign or system event</div></div>
+        <div class="ir iw"><div class="il">DROP · 2024-09-15</div><div class="it">Income records -62% — partial batch load</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="t6" class="tab">
+  <div class="sp">
+    <div>
+      <div class="p"><div class="pt">Entity-relationship network</div><canvas id="c_graph" style="width:100%;height:270px" role="img" aria-label="Knowledge graph network">Graph.</canvas></div>
+      <div class="p"><div class="pt">Relation frequency</div><div style="position:relative;height:110px"><canvas id="c_rel" role="img" aria-label="Relation frequency bar chart">Relations.</canvas></div></div>
+    </div>
+    <div>
+      <div class="p"><div class="pt">Centrality leaderboard</div>
+        <div class="mb"><div class="mbl"><span>Customer ID</span><span>0.94</span></div><div class="mbt"><div class="mbf" style="width:94%;background:#185FA5"></div></div></div>
+        <div class="mb"><div class="mbl"><span>Account ID</span><span>0.81</span></div><div class="mbt"><div class="mbf" style="width:81%;background:#185FA5"></div></div></div>
+        <div class="mb"><div class="mbl"><span>Transaction ID</span><span>0.73</span></div><div class="mbt"><div class="mbf" style="width:73%;background:#378ADD"></div></div></div>
+        <div class="mb"><div class="mbl"><span>Product ID</span><span>0.54</span></div><div class="mbt"><div class="mbf" style="width:54%;background:#378ADD"></div></div></div>
+        <div><div class="mbl"><span>Risk Flag</span><span>0.31</span></div><div class="mbt"><div class="mbf" style="width:31%;background:#B5D4F4"></div></div></div>
+      </div>
+      <div class="p"><div class="pt">Community clusters</div>
+        <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:0.5px solid var(--color-border-tertiary);font-size:12px"><span style="width:10px;height:10px;border-radius:50%;background:#185FA5;flex-shrink:0"></span><span style="font-weight:500">Payment cluster</span><span style="margin-left:auto;font-size:11px;color:var(--color-text-secondary)">5 nodes</span></div>
+        <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:0.5px solid var(--color-border-tertiary);font-size:12px"><span style="width:10px;height:10px;border-radius:50%;background:#3B6D11;flex-shrink:0"></span><span style="font-weight:500">Customer segment</span><span style="margin-left:auto;font-size:11px;color:var(--color-text-secondary)">4 nodes</span></div>
+        <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:0.5px solid var(--color-border-tertiary);font-size:12px"><span style="width:10px;height:10px;border-radius:50%;background:#854F0B;flex-shrink:0"></span><span style="font-weight:500">Risk profile</span><span style="margin-left:auto;font-size:11px;color:var(--color-text-secondary)">3 nodes</span></div>
+        <div style="display:flex;align-items:center;gap:8px;padding:5px 0;font-size:12px"><span style="width:10px;height:10px;border-radius:50%;background:#A32D2D;flex-shrink:0"></span><span style="font-weight:500">Orphan node</span><span style="margin-left:auto;font-size:11px;color:var(--color-text-secondary)">1 node</span></div>
+      </div>
+      <div class="p"><div class="pt">Graph health</div>
+        <div class="ir io"><div class="il">DENSITY</div><div class="it">Graph density 0.74 — well connected</div></div>
+        <div class="ir iw"><div class="il">ORPHAN</div><div class="it">legacy_code has no edges</div></div>
+        <div class="ir ii"><div class="il">TOP RELATION</div><div class="it">HAS_TRANSACTION (4,821 edges)</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="t7" class="tab">
+  <div class="sp">
+    <div>
+      <div class="p"><div class="pt">Action priority matrix</div>
+        <div class="aq">
+          <div class="aqc" style="background:#FCEBEB55;border:0.5px solid #F09595"><div style="font-size:10px;font-weight:500;color:#A32D2D">High impact · Low effort — Do now</div><div><span class="aqchip">Fix null cluster (ETL)</span><br><span class="aqchip">Remove duplicates</span></div></div>
+          <div class="aqc" style="background:#FAEEDA55;border:0.5px solid #FAC775"><div style="font-size:10px;font-weight:500;color:#854F0B">High impact · High effort — Plan</div><div><span class="aqchip">Retrain income model</span><br><span class="aqchip">Resolve multicollinearity</span></div></div>
+          <div class="aqc" style="background:#EAF3DE55;border:0.5px solid #C0DD97"><div style="font-size:10px;font-weight:500;color:#3B6D11">Low impact · Low effort — Quick wins</div><div><span class="aqchip">Fix enum violations</span><br><span class="aqchip">Add type constraints</span></div></div>
+          <div class="aqc" style="background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary)"><div style="font-size:10px;font-weight:500;color:var(--color-text-secondary)">Low impact · High effort — Later</div><div><span class="aqchip">Legacy field migration</span></div></div>
+        </div>
+      </div>
+      <div class="p"><div class="pt">Executive summary</div>
+        <div class="ir ird"><div class="il">BUSINESS RISK</div><div class="it">Systematic nulls in income+debt — ETL failure affecting 8.7% of records, corrupting downstream models</div></div>
+        <div class="ir iw"><div class="il">MODEL RISK</div><div class="it">Income VIF 9.2 — drop or PCA before next training run</div></div>
+        <div class="ir ii"><div class="il">OPPORTUNITY</div><div class="it">Age bimodality → 2 segments, targeted offers could lift conversion 12–18%</div></div>
+      </div>
+    </div>
+    <div>
+      <div class="p"><div class="pt">Confidence basis — trust layer</div>
+        <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:0.5px solid var(--color-border-tertiary);font-size:12px"><span class="badge bdet">deterministic</span><span>Duplicate count</span></div>
+        <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:0.5px solid var(--color-border-tertiary);font-size:12px"><span class="badge bdet">deterministic</span><span>Null rates per column</span></div>
+        <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:0.5px solid var(--color-border-tertiary);font-size:12px"><span class="badge bdet">deterministic</span><span>Type & enum violations</span></div>
+        <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:0.5px solid var(--color-border-tertiary);font-size:12px"><span class="badge bstat">statistical</span><span>Health score (proxy)</span></div>
+        <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:0.5px solid var(--color-border-tertiary);font-size:12px"><span class="badge bstat">statistical</span><span>VIF / correlation</span></div>
+        <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:0.5px solid var(--color-border-tertiary);font-size:12px"><span class="badge bstat">statistical</span><span>PSI drift signal</span></div>
+        <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:0.5px solid var(--color-border-tertiary);font-size:12px"><span class="badge bai">AI-inferred</span><span>ETL failure hypothesis</span></div>
+        <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:0.5px solid var(--color-border-tertiary);font-size:12px"><span class="badge bai">AI-inferred</span><span>Segment opportunity</span></div>
+        <div style="display:flex;align-items:center;gap:8px;padding:5px 0;font-size:12px"><span class="badge bai">AI-inferred</span><span>Fraud pattern signal</span></div>
+      </div>
+      <div class="p"><div class="pt">Recommendations</div>
+        <div style="margin-bottom:10px"><div style="font-size:12px;font-weight:500;color:var(--color-text-primary);margin-bottom:2px">1. Fix ETL null pipeline</div><div style="font-size:11px;color:var(--color-text-secondary)">Impact: critical · Effort: low · Owner: Data Eng</div></div>
+        <div style="margin-bottom:10px"><div style="font-size:12px;font-weight:500;color:var(--color-text-primary);margin-bottom:2px">2. Drop Income from next model run</div><div style="font-size:11px;color:var(--color-text-secondary)">Impact: high · Effort: low · Owner: ML team</div></div>
+        <div><div style="font-size:12px;font-weight:500;color:var(--color-text-primary);margin-bottom:2px">3. Investigate age bimodality</div><div style="font-size:11px;color:var(--color-text-secondary)">Impact: medium · Effort: medium · Owner: Analytics</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+const ID=matchMedia('(prefers-color-scheme:dark)').matches;
+const TXT=ID?'#bbb':'#555';
+const GRD=ID?'rgba(255,255,255,0.07)':'rgba(0,0,0,0.06)';
+const inited=new Set();
+
+function ST(i){
+  document.querySelectorAll('.tab').forEach((t,j)=>t.classList.toggle('on',j===i));
+  document.querySelectorAll('.nb').forEach((b,j)=>b.classList.toggle('on',j===i));
+  setTimeout(()=>initTab(i),60);
+}
+
+function initTab(i){
+  if(inited.has(i))return; inited.add(i);
+  if(i===0)iT0(); if(i===1)iT1(); if(i===2)iT2();
+  if(i===3)iT3(); if(i===4)iT4(); if(i===5)iT5();
+  if(i===6)iT6();
+}
+
+function iT0(){
+  new Chart('c_radar',{type:'radar',data:{labels:['Completeness','Validity','Uniqueness','Consistency','Timeliness','Integrity'],datasets:[{data:[91,78,98.8,63,85,72],backgroundColor:'rgba(24,95,165,0.15)',borderColor:'#185FA5',borderWidth:2,pointBackgroundColor:'#185FA5',label:'Score'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{r:{min:0,max:100,ticks:{font:{size:9},color:TXT,stepSize:25},grid:{color:GRD},pointLabels:{font:{size:10},color:TXT}}}}});
+  const cv=document.getElementById('c_topo'),ctx=cv.getContext('2d');
+  const W=cv.parentElement.clientWidth,H=130,DPR=devicePixelRatio;
+  cv.width=W*DPR;cv.height=H*DPR;cv.style.height=H+'px';ctx.scale(DPR,DPR);
+  const ns=[{x:W*.5,y:50,r:18,l:'customers',c:'#185FA5'},{x:W*.2,y:95,r:14,l:'accounts',c:'#3B6D11'},{x:W*.8,y:95,r:14,l:'transactions',c:'#3B6D11'},{x:W*.15,y:28,r:11,l:'products',c:'#854F0B'},{x:W*.85,y:28,r:10,l:'risk',c:'#854F0B'},{x:W*.5,y:118,r:9,l:'legacy',c:'#A32D2D'}];
+  [[0,1],[0,2],[0,4],[1,2],[1,3],[2,4]].forEach(([a,b])=>{ctx.beginPath();ctx.moveTo(ns[a].x,ns[a].y);ctx.lineTo(ns[b].x,ns[b].y);ctx.strokeStyle=ID?'rgba(255,255,255,0.18)':'rgba(0,0,0,0.12)';ctx.lineWidth=1;ctx.stroke();});
+  ns.forEach(n=>{ctx.beginPath();ctx.arc(n.x,n.y,n.r,0,Math.PI*2);ctx.fillStyle=n.c+'33';ctx.fill();ctx.strokeStyle=n.c;ctx.lineWidth=1.5;ctx.stroke();ctx.fillStyle=ID?'#ccc':'#444';ctx.font='9px sans-serif';ctx.textAlign='center';ctx.fillText(n.l,n.x,n.y+n.r+10);});
+}
+
+function iT1(){
+  const cols=['Age','Income','Debt','Credit','Balance','Txn','Tenure'],dims=['Complete','Valid','Unique','Consist'];
+  const cells=[[1,1,1,1],[1,0,1,0],[1,1,1,0],[1,1,1,1],[0,0,1,0],[1,1,1,1],[1,1,0,1]];
+  let h='<table style="border-collapse:collapse;font-size:10px;width:100%"><tr><td></td>';
+  dims.forEach(d=>h+=`<th style="padding:3px 4px;color:var(--color-text-secondary);font-weight:500;text-align:center">${d}</th>`);h+='</tr>';
+  cols.forEach((c,i)=>{h+=`<tr><td style="padding:3px 6px 3px 0;color:var(--color-text-primary);white-space:nowrap">${c}</td>`;cells[i].forEach(v=>h+=`<td style="text-align:center;padding:2px"><span style="width:13px;height:13px;border-radius:2px;display:inline-block;background:${v?'#63992233':'#E24B4A33'};border:0.5px solid ${v?'#639922':'#E24B4A'}"></span></td>`);h+='</tr>';});
+  document.getElementById('qmat').innerHTML=h+'</table>';
+  const wV=[100,-8,-13,-5,-4,70],wL=['Start','Type','Nulls','Enum','Dupes','Valid'];
+  let run=100,bases=[],bv=[];
+  wV.forEach((v,i)=>{if(i===0){bases.push(0);bv.push(100);}else if(i===wV.length-1){bases.push(0);bv.push(run);}else{bases.push(run+v);bv.push(Math.abs(v));run+=v;}});
+  new Chart('c_wfall',{type:'bar',data:{labels:wL,datasets:[{data:bases,backgroundColor:'transparent',borderColor:'transparent'},{data:bv,backgroundColor:wV.map((v,i)=>i===0||i===wV.length-1?'#185FA5':v<0?'#E24B4A':'#639922'),borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.datasetIndex===1?wV[c.dataIndex]+'%':''}}},scales:{x:{stacked:true,ticks:{font:{size:10},color:TXT},grid:{color:GRD}},y:{stacked:true,max:110,ticks:{font:{size:10},color:TXT,callback:v=>v+'%'},grid:{color:GRD}}}}});
+  new Chart('c_sev',{type:'doughnut',data:{labels:['Critical','High','Medium','Low'],datasets:[{data:[18,31,34,17],backgroundColor:['#E24B4A','#EF9F27','#378ADD','#639922'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},cutout:'65%'}});
+}
+
+const histData={
+  'Income':[12,28,45,67,89,102,87,63,41,22,11,5],
+  'Age':[8,22,41,38,29,35,42,38,31,22,14,7],
+  'Balance':[55,72,63,48,35,24,18,11,7,4,2,1],
+  'Credit Score':[5,12,28,54,78,92,85,67,43,21,8,3],
+  'Risk Score':[3,11,29,58,82,89,74,51,32,15,6,2],
+  'Tenure':[18,32,48,56,49,41,35,28,22,16,8,3]
+};
+let histChart=null;
+
+function updateHist(){
+  const col=document.getElementById('histCol').value;
+  const d=histData[col];
+  if(histChart){histChart.data.datasets[0].data=d;histChart.update();return;}
+  histChart=new Chart('c_hist',{type:'bar',data:{labels:['0-10','10-20','20-30','30-40','40-50','50-60','60-70','70-80','80-90','90-100','100-110','110+'],datasets:[{label:col,data:d,backgroundColor:'#185FA577',borderColor:'#185FA5',borderWidth:1}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9},color:TXT,maxRotation:45},grid:{color:GRD}},y:{ticks:{font:{size:9},color:TXT},grid:{color:GRD}}}}});
+}
+
+const skewData={
+  labels:['Age','Income','Debt','Credit','Risk','Tenure','Txn','Balance'],
+  skew:[0.08,1.94,1.21,0.12,-0.34,0.61,0.88,2.10],
+  outliers:[12,47,31,8,22,9,18,89],
+  colors:['#639922','#E24B4A','#EF9F27','#639922','#EF9F27','#639922','#185FA5','#A32D2D']
+};
+
+function drawBoxPlots(){
+  const cv=document.getElementById('c_box'),ctx=cv.getContext('2d');
+  const W=cv.parentElement.clientWidth,H=130,DPR=devicePixelRatio;
+  cv.width=W*DPR;cv.height=H*DPR;cv.style.height=H+'px';ctx.scale(DPR,DPR);
+  const cols=['Age','Income','Debt','Credit','Risk','Tenure','Txn','Bal'];
+  const stats=[[22,38,52,67,85],[18,45,78,120,190],[5,22,38,61,95],[420,560,650,720,800],[1,18,35,52,78],[0.5,2.1,4.2,7.8,14],[120,380,620,890,1450],[100,450,820,1800,4200]];
+  const cw=W/cols.length;
+  ctx.font='8px sans-serif';ctx.textAlign='center';ctx.fillStyle=ID?'#bbb':'#666';
+  cols.forEach((c,i)=>ctx.fillText(c,i*cw+cw/2,H-4));
+  stats.forEach((s,i)=>{
+    const x=i*cw+cw/2,pad=10,rng=s[4]-s[0];
+    const scale=(H-30)/rng;
+    const y=v=>H-20-(v-s[0])*scale;
+    ctx.strokeStyle='#B4B2A9';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(x,y(s[0]));ctx.lineTo(x,y(s[1]));ctx.stroke();
+    ctx.beginPath();ctx.moveTo(x,y(s[3]));ctx.lineTo(x,y(s[4]));ctx.stroke();
+    const bw=cw*0.5;
+    ctx.fillStyle='#185FA522';ctx.strokeStyle='#185FA5';ctx.lineWidth=1.5;
+    ctx.fillRect(x-bw/2,y(s[3]),bw,y(s[1])-y(s[3]));
+    ctx.strokeRect(x-bw/2,y(s[3]),bw,y(s[1])-y(s[3]));
+    ctx.beginPath();ctx.moveTo(x-bw/2,y(s[2]));ctx.lineTo(x+bw/2,y(s[2]));ctx.strokeStyle='#185FA5';ctx.lineWidth=2;ctx.stroke();
+  });
+}
+
+let scatterChart=null;
+const scatterSets={
+  'Income-Credit Score':{pts:Array.from({length:60},()=>({x:20+Math.random()*180,y:400+Math.random()*350+0.8*(Math.random()*180)})),col:'#185FA5'},
+  'Age-Risk Score':{pts:Array.from({length:60},()=>({x:20+Math.random()*60,y:80-(Math.random()*60)+Math.random()*20})),col:'#854F0B'},
+  'Debt-Balance':{pts:Array.from({length:60},()=>({x:5+Math.random()*90,y:200+Math.random()*4000*Math.random()})),col:'#3B6D11'},
+  'Income-Risk Score':{pts:Array.from({length:60},()=>({x:20+Math.random()*180,y:80-Math.random()*50+Math.random()*30})),col:'#A32D2D'}
+};
+
+function updateScatter(){
+  const xc=document.getElementById('scX').value,yc=document.getElementById('scY').value;
+  const key=xc+'-'+yc;
+  const pts=scatterSets[key]?scatterSets[key].pts:Array.from({length:60},()=>({x:Math.random()*100,y:Math.random()*100}));
+  const col=scatterSets[key]?scatterSets[key].col:'#185FA5';
+  if(scatterChart){scatterChart.data.datasets[0].data=pts;scatterChart.data.datasets[0].backgroundColor=col+'88';scatterChart.data.datasets[0].borderColor=col;scatterChart.data.labels=[xc+' vs '+yc];scatterChart.update();return;}
+  scatterChart=new Chart('c_scatter',{type:'scatter',data:{datasets:[{label:xc+' vs '+yc,data:pts,backgroundColor:col+'88',borderColor:col,borderWidth:1,pointRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{title:{display:true,text:xc,font:{size:10},color:TXT},ticks:{font:{size:9},color:TXT},grid:{color:GRD}},y:{title:{display:true,text:yc,font:{size:10},color:TXT},ticks:{font:{size:9},color:TXT},grid:{color:GRD}}},layout:{padding:10}}});
+}
+
+function iT2(){
+  updateHist();
+  new Chart('c_skewout',{type:'scatter',data:{datasets:[{label:'Columns',data:skewData.skew.map((s,i)=>({x:s,y:skewData.outliers[i],label:skewData.labels[i]})),backgroundColor:skewData.colors.map(c=>c+'cc'),borderColor:skewData.colors,borderWidth:1.5,pointRadius:8,pointHoverRadius:10}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.raw.label}: skew ${c.raw.x.toFixed(2)}, outliers ${c.raw.y}`}}},scales:{x:{title:{display:true,text:'Skewness →',font:{size:10},color:TXT},ticks:{font:{size:9},color:TXT},grid:{color:GRD}},y:{title:{display:true,text:'Outlier count →',font:{size:10},color:TXT},ticks:{font:{size:9},color:TXT},grid:{color:GRD}}},layout:{padding:10}}});
+  drawBoxPlots();
+  updateScatter();
+  new Chart('c_violin',{type:'bar',data:{labels:['Segment A','Segment B','Segment C'],datasets:[{label:'Q1',data:[42,38,55],backgroundColor:'#B5D4F4',borderWidth:0},{label:'Median',data:[72,65,89],backgroundColor:'#185FA5',borderWidth:0},{label:'Q3',data:[110,95,140],backgroundColor:'#B5D4F4',borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{stacked:true,ticks:{font:{size:10},color:TXT},grid:{display:false}},y:{stacked:true,title:{display:true,text:'Income (k)',font:{size:9},color:TXT},ticks:{font:{size:9},color:TXT},grid:{color:GRD}}}}});
+  new Chart('c_stacked',{type:'bar',data:{labels:['Active','Inactive','Pending'],datasets:[{label:'Low risk',data:[1240,430,180],backgroundColor:'#63992288',borderWidth:0},{label:'Medium risk',data:[680,290,95],backgroundColor:'#EF9F2788',borderWidth:0},{label:'High risk',data:[142,87,31],backgroundColor:'#E24B4A88',borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{stacked:true,ticks:{font:{size:10},color:TXT},grid:{display:false}},y:{stacked:true,ticks:{font:{size:9},color:TXT},grid:{color:GRD}}}}});
+  drawPairPlot();
+  new Chart('c_grouped',{type:'bar',data:{labels:['Income','Balance','Credit','Tenure'],datasets:[{label:'Low risk',data:[85,42,710,6.2],backgroundColor:'#63992288',borderWidth:0},{label:'Med risk',data:[62,31,580,4.1],backgroundColor:'#EF9F2788',borderWidth:0},{label:'High risk',data:[38,18,420,2.3],backgroundColor:'#E24B4A88',borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9},color:TXT},grid:{display:false}},y:{ticks:{font:{size:9},color:TXT},grid:{color:GRD}}}}});
+  drawPCA();
+}
+
+function drawPairPlot(){
+  const cv=document.getElementById('c_pair'),ctx=cv.getContext('2d');
+  const W=cv.parentElement.clientWidth,H=260,DPR=devicePixelRatio;
+  cv.width=W*DPR;cv.height=H*DPR;cv.style.height=H+'px';ctx.scale(DPR,DPR);
+  const feats=['Age','Income','Debt','Credit'],n=feats.length,cw=W/n,ch=H/n;
+  const colors=['#185FA5','#3B6D11','#A32D2D'];
+  for(let i=0;i<n;i++)for(let j=0;j<n;j++){
+    const x0=j*cw,y0=i*ch;
+    ctx.fillStyle=ID?'#1a1a1a':'#f8f8f8';ctx.fillRect(x0,y0,cw-2,ch-2);
+    ctx.strokeStyle=ID?'rgba(255,255,255,0.1)':'rgba(0,0,0,0.08)';ctx.lineWidth=0.5;ctx.strokeRect(x0,y0,cw-2,ch-2);
+    if(i===j){ctx.fillStyle=ID?'#bbb':'#666';ctx.font='9px sans-serif';ctx.textAlign='center';ctx.fillText(feats[i],x0+cw/2,y0+ch/2+4);}
+    else{for(let k=0;k<25;k++){const px=x0+8+Math.random()*(cw-16),py=y0+8+Math.random()*(ch-16);const seg=k%3;ctx.beginPath();ctx.arc(px,py,2,0,Math.PI*2);ctx.fillStyle=colors[seg]+'99';ctx.fill();}}
+  }
+  ctx.fillStyle=ID?'#aaa':'#777';ctx.font='8px sans-serif';ctx.textAlign='center';
+  feats.forEach((f,j)=>ctx.fillText(f,j*cw+cw/2,H-2));
+}
+
+function drawPCA(){
+  const clusters=[[{x:2.1,y:3.4},{x:2.8,y:2.9},{x:1.9,y:3.8},{x:3.1,y:3.2},{x:2.5,y:2.6},{x:2.2,y:4.1},{x:3.3,y:2.8},{x:1.7,y:3.5}],[{x:5.2,y:1.8},{x:4.8,y:2.3},{x:5.8,y:1.5},{x:5.1,y:2.8},{x:4.5,y:1.9},{x:6.1,y:2.1},{x:5.5,y:3.2},{x:4.9,y:1.2}],[{x:8.1,y:4.2},{x:7.8,y:5.1},{x:8.5,y:3.8},{x:9.1,y:4.5},{x:7.5,y:4.8},{x:8.8,y:5.4},{x:9.4,y:3.5},{x:7.2,y:5.8}]];
+  const colors2=['#185FA5','#3B6D11','#A32D2D'];
+  const datasets=clusters.map((pts,i)=>({label:'Segment '+['A','B','C'][i],data:pts,backgroundColor:colors2[i]+'88',borderColor:colors2[i],borderWidth:1,pointRadius:5}));
+  new Chart('c_pca',{type:'scatter',data:{datasets},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{title:{display:true,text:'PC1 (44%)',font:{size:10},color:TXT},ticks:{font:{size:9},color:TXT},grid:{color:GRD},min:0,max:11},y:{title:{display:true,text:'PC2 (22%)',font:{size:10},color:TXT},ticks:{font:{size:9},color:TXT},grid:{color:GRD},min:0,max:7}},layout:{padding:10}}});
+}
+
+function setDist(type,btn){
+  document.querySelectorAll('.stabs .sb').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  document.getElementById('dist_uni').style.display=type==='uni'?'block':'none';
+  document.getElementById('dist_bi').style.display=type==='bi'?'block':'none';
+  document.getElementById('dist_mv').style.display=type==='mv'?'block':'none';
+  if(type==='bi'&&!scatterChart)updateScatter();
+}
+
+const cols_h=['Age','Income','Debt','Credit','Risk','Tenure','Txn','Balance'];
+const pearson_h=[[1,.23,-.18,.31,-.62,.41,.17,.28],[.23,1,.79,.87,-.21,.14,.55,.67],[-.18,.79,1,.61,-.08,.02,.43,.52],[.31,.87,.61,1,-.33,.22,.49,.74],[-.62,-.21,-.08,-.33,1,-.11,-.09,-.17],[.41,.14,.02,.22,-.11,1,.08,.19],[.17,.55,.43,.49,-.09,.08,1,.62],[.28,.67,.52,.74,-.17,.19,.62,1]];
+const spearman_h=pearson_h.map(r=>r.map(v=>+(v*.93).toFixed(2)));
+const mic_h=pearson_h.map(r=>r.map(v=>+(Math.abs(v)*.88).toFixed(2)));
+const hmethods={pearson:pearson_h,spearman:spearman_h,mic:mic_h};
+let curH='pearson';
+
+function heatColor(v,m){
+  if(m==='mic'){const t=Math.abs(v);return`rgb(${Math.round(230-(230-24)*t)},${Math.round(241-(241-95)*t)},${Math.round(251-(251-165)*t)})`;}
+  if(v>=0){const t=v;return`rgb(${Math.round(255-(255-24)*t)},${Math.round(255-(255-95)*t)},${Math.round(255-(255-165)*t)})`;}
+  const t=-v;return`rgb(${Math.round(255-(255-186)*t)},${Math.round(255-(255-117)*t)},${Math.round(255-(255-23)*t)})`;
+}
+
+function drawHeat(){
+  const cv=document.getElementById('c_heat');if(!cv)return;
+  const data=hmethods[curH],n=cols_h.length,W=cv.parentElement.clientWidth-4;
+  const lw=50,tp=52,cw=(W-lw)/n,DPR=devicePixelRatio,H=tp+cw*n+6;
+  cv.width=W*DPR;cv.height=H*DPR;cv.style.width=W+'px';cv.style.height=H+'px';
+  const ctx=cv.getContext('2d');ctx.scale(DPR,DPR);ctx.clearRect(0,0,W,H);
+  ctx.fillStyle=ID?'#aaa':'#555';ctx.font='10px sans-serif';
+  cols_h.forEach((c,i)=>{ctx.textAlign='right';ctx.fillText(c,lw-4,tp+i*cw+cw/2+4);});
+  cols_h.forEach((c,j)=>{ctx.save();ctx.translate(lw+j*cw+cw/2,tp-4);ctx.rotate(-Math.PI/4);ctx.textAlign='left';ctx.fillText(c,0,0);ctx.restore();});
+  for(let i=0;i<n;i++)for(let j=0;j<n;j++){
+    const v=data[i][j];ctx.fillStyle=heatColor(v,curH);ctx.fillRect(lw+j*cw,tp+i*cw,cw-.5,cw-.5);
+    ctx.fillStyle=Math.abs(v)>.5||i===j?'#fff':'#555';ctx.font='8px sans-serif';ctx.textAlign='center';
+    ctx.fillText(curH==='mic'?Math.abs(v).toFixed(2):v.toFixed(2),lw+j*cw+cw/2,tp+i*cw+cw/2+3);
+  }
+  document.getElementById('hleg').style.background=curH==='mic'?'linear-gradient(to right,#E6F1FB,#185FA5)':'linear-gradient(to right,#BA7517,#fff,#185FA5)';
+  const tip=document.getElementById('htip');
+  cv.onmousemove=e=>{const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top,ci=Math.floor((mx-lw)/cw),ri=Math.floor((my-tp)/cw);if(ci>=0&&ci<n&&ri>=0&&ri<n){tip.style.display='block';tip.style.left=(mx+12)+'px';tip.style.top=(my-8)+'px';tip.innerHTML=`<b>${cols_h[ri]}</b> ↔ <b>${cols_h[ci]}</b><br>r = ${data[ri][ci].toFixed(2)}`;}else tip.style.display='none';};
+  cv.onmouseleave=()=>tip.style.display='none';
+}
+
+function updateCorrSig(m){
+  const sigs={pearson:['Income ↔ Credit Score r=0.87','Debt ↔ Income r=0.79','Age ↔ Risk Score r=−0.62','Tenure ↔ Risk r=0.04'],spearman:['Income ↔ Credit ρ=0.81','Debt ↔ Income ρ=0.73','Age ↔ Risk ρ=−0.57','Tenure ↔ Risk ρ=0.03'],mic:['Income ↔ Credit MIC=0.76','Debt ↔ Income MIC=0.70','Age ↔ Risk MIC=0.55','Tenure ↔ Risk MIC=0.04']};
+  const types=['iw','iw','ii','io'],labs=['STRONG POSITIVE','MULTICOLLINEARITY','MODERATE NEGATIVE','NEAR ZERO'];
+  document.getElementById('corrSig').innerHTML=sigs[m].map((t,i)=>`<div class="ir ${types[i]}"><div class="il">${labs[i]}</div><div class="it">${t}</div></div>`).join('');
+}
+
+function setCorr(m,btn){
+  curH=m;document.querySelectorAll('#t3 .sb').forEach(b=>b.classList.remove('on'));btn.classList.add('on');drawHeat();updateCorrSig(m);
+}
+
+function iT3(){updateCorrSig('pearson');drawHeat();new Chart('c_vif',{type:'bar',data:{labels:['Income','Debt','Credit','Balance','Txn','Age','Tenure','Risk'],datasets:[{label:'VIF',data:[9.2,7.8,7.1,5.4,3.2,2.1,1.6,1.3],backgroundColor:['#E24B4A','#EF9F27','#EF9F27','#EF9F27','#639922','#639922','#639922','#639922'],borderWidth:0}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{max:12,ticks:{font:{size:10},color:TXT},grid:{color:GRD}},y:{ticks:{font:{size:10},color:TXT},grid:{display:false}}}}});}
+
+function iT4(){
+  new Chart('c_bubble',{type:'bubble',data:{datasets:[{label:'',data:[{x:4.2,y:8.5,r:14,l:'Income outliers'},{x:3.8,y:9.1,r:12,l:'Neg balance'},{x:2.1,y:5.4,r:9,l:'Risk multivar'},{x:1.4,y:3.2,r:7,l:'Null cluster'},{x:0.8,y:1.9,r:5,l:'Enum flags'},{x:1.2,y:7.1,r:8,l:'Fraud pattern'}],backgroundColor:['#E24B4A88','#E24B4A88','#EF9F2788','#EF9F2788','#63992288','#A32D2D88'],borderColor:['#E24B4A','#E24B4A','#EF9F27','#EF9F27','#639922','#A32D2D'],borderWidth:1.5}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.raw.l} — sev ${c.raw.x.toFixed(1)}, impact ${c.raw.y.toFixed(1)}`}}},scales:{x:{min:0,max:6,title:{display:true,text:'Severity',font:{size:10},color:TXT},ticks:{font:{size:9},color:TXT},grid:{color:GRD}},y:{min:0,max:11,title:{display:true,text:'Business impact',font:{size:10},color:TXT},ticks:{font:{size:9},color:TXT},grid:{color:GRD}}},layout:{padding:16}}});
+  const pc=document.getElementById('c_para'),pctx=pc.getContext('2d');
+  const PW=pc.parentElement.clientWidth,PH=125,DPR=devicePixelRatio;
+  pc.width=PW*DPR;pc.height=PH*DPR;pc.style.height=PH+'px';pctx.scale(DPR,DPR);
+  const axes=['Age','Income','Debt','Credit','Risk','Balance'],nA=axes.length;
+  const axX=axes.map((_,i)=>40+i*(PW-60)/(nA-1));
+  pctx.strokeStyle=ID?'rgba(255,255,255,0.1)':'rgba(0,0,0,0.1)';pctx.lineWidth=1;
+  axX.forEach(x=>{pctx.beginPath();pctx.moveTo(x,18);pctx.lineTo(x,98);pctx.stroke();});
+  pctx.fillStyle=ID?'#aaa':'#666';pctx.font='9px sans-serif';pctx.textAlign='center';
+  axes.forEach((a,i)=>pctx.fillText(a,axX[i],113));
+  [[0.3,0.95,0.82,0.2,0.9,0.85],[0.7,0.4,0.35,0.7,0.4,0.45],[0.5,0.7,0.6,0.5,0.55,0.65]].forEach((pts,li)=>{pctx.beginPath();pts.forEach((v,i)=>{const y=98-v*80;i===0?pctx.moveTo(axX[i],y):pctx.lineTo(axX[i],y);});pctx.strokeStyle=['#E24B4A','#185FA5','#854F0B'][li]+'cc';pctx.lineWidth=1.5;pctx.stroke();});
+}
+
+function iT5(){
+  const M=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const opts=n=>({responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9},color:TXT},grid:{color:GRD}},y:{ticks:{font:{size:9},color:TXT},grid:{color:GRD}}}});
+  new Chart('c_trend',{type:'line',data:{labels:M,datasets:[{data:[100,103,106,108,109,112,114,115,117,118,121,142],borderColor:'#185FA5',borderWidth:2,pointRadius:2,tension:.3,fill:false,label:'Trend'}]},options:opts()});
+  const s=[2,-1,3,5,4,2,-1,-3,-4,-2,3,6];
+  new Chart('c_seas',{type:'bar',data:{labels:M,datasets:[{data:s,backgroundColor:s.map(v=>v>=0?'#185FA5':'#E24B4A'),borderWidth:0,label:'Seasonality'}]},options:opts()});
+  const r=[0.5,-1.2,0.8,-0.3,1.1,-0.9,0.4,1.3,-0.6,0.2,-1.0,0.7];
+  new Chart('c_res',{type:'bar',data:{labels:M,datasets:[{data:r,backgroundColor:r.map(v=>Math.abs(v)>1?'#E24B4A88':'#B4B2A9'),borderWidth:0,label:'Residual'}]},options:opts()});
+  const gc=document.getElementById('c_gauge'),gctx=gc.getContext('2d'),GW=gc.parentElement.clientWidth,DPR=devicePixelRatio;
+  gc.width=GW*DPR;gc.height=125*DPR;gc.style.height='125px';gctx.scale(DPR,DPR);
+  const cx=GW/2,cy=108,R=72;
+  [{s:Math.PI,e:Math.PI+Math.PI*.33,c:'#639922'},{s:Math.PI+Math.PI*.33,e:Math.PI+Math.PI*.67,c:'#EF9F27'},{s:Math.PI+Math.PI*.67,e:2*Math.PI,c:'#E24B4A'}].forEach(g=>{gctx.beginPath();gctx.arc(cx,cy,R,g.s,g.e);gctx.arc(cx,cy,R-15,g.e,g.s,true);gctx.fillStyle=g.c+'55';gctx.fill();gctx.strokeStyle=g.c;gctx.lineWidth=1;gctx.stroke();});
+  const ang=Math.PI+(0.14/0.3)*Math.PI;gctx.beginPath();gctx.moveTo(cx,cy);gctx.lineTo(cx+Math.cos(ang)*60,cy+Math.sin(ang)*60);gctx.strokeStyle=ID?'#ccc':'#333';gctx.lineWidth=2;gctx.stroke();gctx.beginPath();gctx.arc(cx,cy,5,0,Math.PI*2);gctx.fillStyle=ID?'#ccc':'#333';gctx.fill();
+}
+
+function iT6(){
+  const gc=document.getElementById('c_graph'),gctx=gc.getContext('2d'),GW=gc.parentElement.clientWidth,DPR=devicePixelRatio;
+  gc.width=GW*DPR;gc.height=270*DPR;gc.style.height='270px';gctx.scale(DPR,DPR);
+  const ns=[{x:GW*.5,y:70,r:20,l:'Customer',c:'#185FA5'},{x:GW*.25,y:130,r:15,l:'Account',c:'#185FA5'},{x:GW*.75,y:130,r:15,l:'Transaction',c:'#185FA5'},{x:GW*.15,y:200,r:13,l:'Product',c:'#3B6D11'},{x:GW*.42,y:205,r:13,l:'Balance',c:'#3B6D11'},{x:GW*.65,y:215,r:13,l:'Risk Flag',c:'#854F0B'},{x:GW*.85,y:195,r:12,l:'Score',c:'#854F0B'},{x:GW*.5,y:250,r:10,l:'Legacy',c:'#A32D2D'}];
+  [[0,1],[0,2],[1,3],[1,4],[2,4],[2,5],[5,6],[0,6]].forEach(([a,b])=>{gctx.beginPath();gctx.moveTo(ns[a].x,ns[a].y);gctx.lineTo(ns[b].x,ns[b].y);gctx.strokeStyle=ID?'rgba(255,255,255,0.14)':'rgba(0,0,0,0.1)';gctx.lineWidth=1.5;gctx.stroke();});
+  [[0,1,2],[3,4],[5,6]].forEach((g,gi)=>{if(g.length<2)return;const cs2=['#185FA5','#3B6D11','#854F0B'],xs=g.map(i=>ns[i].x),ys=g.map(i=>ns[i].y);gctx.strokeStyle=cs2[gi];gctx.lineWidth=1;gctx.setLineDash([4,3]);gctx.strokeRect(Math.min(...xs)-18,Math.min(...ys)-18,Math.max(...xs)-Math.min(...xs)+36,Math.max(...ys)-Math.min(...ys)+36);gctx.setLineDash([]);});
+  ns.forEach(n=>{gctx.beginPath();gctx.arc(n.x,n.y,n.r,0,Math.PI*2);gctx.fillStyle=n.c+'33';gctx.fill();gctx.strokeStyle=n.c;gctx.lineWidth=2;gctx.stroke();gctx.fillStyle=ID?'#ccc':'#333';gctx.font='9px sans-serif';gctx.textAlign='center';gctx.fillText(n.l,n.x,n.y+n.r+10);});
+  new Chart('c_rel',{type:'bar',data:{labels:['HAS_TXN','HAS_ACCT','BELONGS_TO','HAS_RISK','OWNS'],datasets:[{data:[4821,3204,2918,1432,876],backgroundColor:['#185FA5','#185FA5','#3B6D11','#854F0B','#3B6D11'],borderWidth:0,label:'Count'}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9},color:TXT},grid:{color:GRD}},y:{ticks:{font:{size:9},color:TXT},grid:{display:false}}}}});
+}
+
+initTab(0);
+window.addEventListener('resize',()=>{if(inited.has(3))drawHeat();});
+</script>

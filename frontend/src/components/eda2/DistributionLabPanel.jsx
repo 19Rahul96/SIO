@@ -149,300 +149,147 @@ export default function DistributionLabPanel({
   insights = [],
   caps = {},
 }) {
-  const [search, setSearch] = useState('')
-  const [feature, setFeature] = useState('')
-  const [compareFeature, setCompareFeature] = useState('')
-  const [range, setRange] = useState('all')
-  const [segment, setSegment] = useState('all')
-  const [view, setView] = useState('hist')
-  // New: tab state for intelligence type
-  const [intelligenceTab, setIntelligenceTab] = useState('univariate') // 'univariate' | 'bivariate' | 'multivariate'
-
-  const columns = stats?.columns || {}
-  const featureNames = useMemo(() => Object.keys(columns), [columns])
-
+  // ...existing code...
+  // --- State and derived variables (same as before) ---
+  const [search, setSearch] = useState("");
+  const [feature, setFeature] = useState("");
+  const [compareFeature, setCompareFeature] = useState("");
+  const [intelligenceTab, setIntelligenceTab] = useState("univariate");
+  const columns = stats?.columns || {};
+  const featureNames = useMemo(() => Object.keys(columns), [columns]);
   useEffect(() => {
-    if (!feature && featureNames.length) {
-      setFeature(featureNames[0])
-    }
-  }, [feature, featureNames])
-
+    if (!feature && featureNames.length) setFeature(featureNames[0]);
+  }, [feature, featureNames]);
   useEffect(() => {
-    if (!compareFeature && featureNames.length > 1) {
-      setCompareFeature(featureNames[1])
-    }
-  }, [compareFeature, featureNames])
-
-  const filteredFeatures = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    if (!q) return featureNames
-    return featureNames.filter((name) => name.toLowerCase().includes(q))
-  }, [featureNames, search])
-
-  const stat = columns[feature] || {}
-  const outlierRow = (outliers?.columns || []).find((r) => r.column === feature) || {}
-  const outlierCount = safeNum(outlierRow.iqr_outliers) + safeNum(outlierRow.zscore_outliers)
-
-  const corrLabels = corr?.labels || []
-  const pearson = corr?.pearson || []
-  const spearman = corr?.spearman || []
-
-  // Derived variables for rendering
-  const runLabel = selectedRun?.db_id || selectedRun?.file_id || 'current-run';
-  // These should be defined or replaced with actual logic/data
-  const executiveKpis = kpis?.executive || [];
-  const featureRows = stats?.featureRows || [];
-  const univariateChart = stats?.univariateChart || {};
-  const aiInsights = buildInsights(feature, stat, 0, outlierCount); // Example usage
-  const bivariateHeatmap = corr?.bivariateHeatmap || {};
-  const bivariateScatter = corr?.bivariateScatter || {};
-  const covHeatmap = corr?.covHeatmap || {};
-  const outlierDensity = stats?.outlierDensity || 0;
-  const maxCorr = corr?.maxCorr || 0;
-  const featureCount = featureNames.length;
-  const readiness = stats?.readiness || 0;
-  const skewedCount = stats?.skewedCount || 0;
-  const heavyTailCount = stats?.heavyTailCount || 0;
-  const multiRisk = stats?.multiRisk || 0;
-  const recommendationCards = stats?.recommendations || [];
-
-  // Pair metrics for bivariate tab
+    if (!compareFeature && featureNames.length > 1) setCompareFeature(featureNames[1]);
+  }, [compareFeature, featureNames]);
+  const stat = columns[feature] || {};
+  const outlierRow = (outliers?.columns || []).find((r) => r.column === feature) || {};
+  const outlierCount = safeNum(outlierRow.iqr_outliers) + safeNum(outlierRow.zscore_outliers);
+  const corrLabels = corr?.labels || [];
+  const pearson = corr?.pearson || [];
+  const spearman = corr?.spearman || [];
+  // --- Pair metrics for bivariate tab ---
   const pairMetrics = useMemo(() => {
     const i = corrLabels.indexOf(feature);
     const j = corrLabels.indexOf(compareFeature);
-    if (i < 0 || j < 0) {
-      return { pearson: 0, spearman: 0, kendallProxy: 0, corrDelta: 0 };
-    }
+    if (i < 0 || j < 0) return { pearson: 0, spearman: 0, kendallProxy: 0, corrDelta: 0 };
     return {
       pearson: safeNum((pearson[i] || [])[j]),
       spearman: safeNum((spearman[i] || [])[j]),
-      kendallProxy: 0, // Add kendall if available
+      kendallProxy: 0,
       corrDelta: Math.abs(safeNum((pearson[i] || [])[j]) - safeNum((spearman[i] || [])[j])),
     };
   }, [feature, compareFeature, corrLabels, pearson, spearman]);
 
-  // Export handler
-  const onExport = () => {
-    const payload = {
-      run_id: runLabel,
-      selected_feature: feature,
-      range,
-      segment,
-      summary: executiveKpis,
-      feature_stat: stat,
-      pair_metrics: pairMetrics,
-      insights: aiInsights,
-      recommendations: recommendationCards,
-      generated_at: new Date().toISOString(),
-    };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `distribution_lab_${runLabel}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  // Main render
+  // --- UI ---
   return (
     <div className="space-y-3">
-      <div className="card" style={{ background: 'linear-gradient(125deg, rgba(37,99,235,.08), rgba(14,165,233,.06), rgba(217,119,6,.07))' }}>
-        <div className="flex items-start justify-between gap-3 flex-wrap">
-          <div>
-            <div className="text-[14px] font-semibold text-t1">Distribution Lab</div>
-            <div className="text-[11px] text-t3 mt-1">AI-powered statistical intelligence and distribution observability workspace.</div>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <select className="btn btn-sm" value={runLabel} disabled title="Dataset selector">
-              <option value={runLabel}>Dataset: {runLabel}</option>
-            </select>
-            <select className="btn btn-sm" value={feature} onChange={(e) => setFeature(e.target.value)} title="Feature selector">
-              {(featureNames.length ? featureNames : ['n/a']).map((name) => (
-                <option key={name} value={name}>{name}</option>
-              ))}
-            </select>
-            <select className="btn btn-sm" value={range} onChange={(e) => setRange(e.target.value)} title="Time-range selector">
-              <option value="all">All Time</option>
-              <option value="last_90d">Last 90 Days</option>
-              <option value="last_30d">Last 30 Days</option>
-              <option value="last_7d">Last 7 Days</option>
-            </select>
-            <select className="btn btn-sm" value={segment} onChange={(e) => setSegment(e.target.value)} title="Segment filter">
-              <option value="all">All Segments</option>
-              <option value="high_risk">High Risk</option>
-              <option value="medium_risk">Medium Risk</option>
-              <option value="low_risk">Low Risk</option>
-            </select>
-            <button className="btn btn-sm" onClick={onExport}>Export Analysis</button>
-          </div>
-        </div>
-        <div className="mt-3 px-3 py-2 rounded-sm border border-dborder bg-bg4 text-[11px] text-t2">
-          <span className="font-semibold text-t1">AI Insight Banner:</span> Statistical readiness is {pct(readiness)} with
-          {' '}{num(skewedCount, 0)} skewed feature(s), {num(heavyTailCount, 0)} heavy-tail feature(s), and
-          {' '}multicollinearity risk at {pct(multiRisk)}. Prioritize transformation and dependency controls before production retraining.
-        </div>
+      <div className="stabs flex gap-2 mb-2">
+        <button className={`sb btn btn-sm ${intelligenceTab === 'univariate' ? 'on bg-amber-200 text-t1 font-semibold' : ''}`} onClick={() => setIntelligenceTab('univariate')}>Univariate</button>
+        <button className={`sb btn btn-sm ${intelligenceTab === 'bivariate' ? 'on bg-amber-200 text-t1 font-semibold' : ''}`} onClick={() => setIntelligenceTab('bivariate')}>Bivariate</button>
+        <button className={`sb btn btn-sm ${intelligenceTab === 'multivariate' ? 'on bg-amber-200 text-t1 font-semibold' : ''}`} onClick={() => setIntelligenceTab('multivariate')}>Multivariate</button>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-2">
-        {executiveKpis.map((card) => (
-          <div key={card.name} className="card" title={card.tooltip}>
-            <div className="flex items-center justify-between gap-2">
-              <div className="text-[10px] uppercase tracking-wider text-t3">{card.name}</div>
-              <span className="text-[9px] px-2 py-0.5 rounded-full" style={severityStyle(card.severity)}>{card.severity}</span>
-            </div>
-            <div className="text-[19px] font-sora text-t1 mt-1">{card.value}</div>
-            <div className="text-[10px] text-t3">Trend {card.delta}</div>
-            <Sparkline values={card.spark} />
-          </div>
-        ))}
-      </div>
-      {/* Intelligence Tabs */}
-      <div className="flex gap-2 mt-2 mb-2">
-        <button
-          className={`btn btn-sm ${intelligenceTab === 'univariate' ? 'bg-amber-200 text-t1 font-semibold' : 'bg-bg4 text-t2'}`}
-          onClick={() => setIntelligenceTab('univariate')}
-        >
-          Univariate Intelligence
-        </button>
-        <button
-          className={`btn btn-sm ${intelligenceTab === 'bivariate' ? 'bg-amber-200 text-t1 font-semibold' : 'bg-bg4 text-t2'}`}
-          onClick={() => setIntelligenceTab('bivariate')}
-        >
-          Bivariate Intelligence
-        </button>
-        <button
-          className={`btn btn-sm ${intelligenceTab === 'multivariate' ? 'bg-amber-200 text-t1 font-semibold' : 'bg-bg4 text-t2'}`}
-          onClick={() => setIntelligenceTab('multivariate')}
-        >
-          Multivariate Intelligence
-        </button>
-      </div>
-      {/* Tab Content */}
+
+      {/* Univariate Tab */}
       {intelligenceTab === 'univariate' && (
-        <div className="grid grid-cols-12 gap-3">
-          <div className="col-span-12 xl:col-span-9 space-y-3">
-            <div className="card">
-              <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
-                <div>
-                  <div className="text-[12px] font-semibold text-t1">Univariate Intelligence</div>
-                  <div className="text-[10px] text-t3">Feature-level distribution diagnostics with risk annotations.</div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Search feature"
-                    className="px-2 py-1 text-[11px] rounded-sm border border-dborder bg-bg4 text-t1"
-                  />
-                  <select className="btn btn-sm" value={view} onChange={(e) => setView(e.target.value)}>
-                    <option value="hist">Histogram</option>
-                    <option value="percentile">Percentiles</option>
-                    <option value="qq">QQ Plot</option>
-                  </select>
-                </div>
+        <div className="sp grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <div className="p card mb-4">
+              <div className="pt font-semibold mb-2">Histograms — frequency distribution</div>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-[11px] text-t3">Column:</span>
+                <select className="btn btn-xs" value={feature} onChange={e => setFeature(e.target.value)}>
+                  {featureNames.map((name) => <option key={name} value={name}>{name}</option>)}
+                </select>
               </div>
-              <div className="grid grid-cols-12 gap-3">
-                <div className="col-span-12 md:col-span-3 bg-bg4 border border-dborder rounded-sm px-2 py-2 max-h-[340px] overflow-auto">
-                  {featureRows.slice(0, 40).map((row) => {
-                    const active = row.name === feature;
-                    const sev = severityFor(row.risk / 3, 0.7, 0.35);
-                    return (
-                      <button
-                        key={row.name}
-                        className="w-full text-left px-2 py-1.5 rounded-sm mb-1 border"
-                        style={active
-                          ? { borderColor: '#2563eb', background: 'rgba(37,99,235,.1)' }
-                          : { borderColor: 'rgba(148,163,184,.2)', background: 'transparent' }}
-                        onClick={() => setFeature(row.name)}
-                      >
-                        <div className="text-[11px] text-t1 truncate" title={row.name}>{row.name}</div>
-                        <div className="text-[10px] text-t3">skew {num(row.skew)} · kurt {num(row.kurt)} · outliers {num(row.outlierTotal, 0)}</div>
-                        <div className="mt-1 inline-block text-[9px] px-1.5 py-0.5 rounded-full" style={severityStyle(sev)}>{sev} anomaly marker</div>
-                      </button>
-                    );
-                  })}
-                  {!featureRows.length && <div className="text-[11px] text-t3">No statistical profiles available.</div>}
+              <div style={{height: 210}}><ChartRenderer chart={stats?.histograms?.[feature] || {}} /></div>
+            </div>
+            <div className="p card mb-4">
+              <div className="pt font-semibold mb-2">Box plots — spread & outliers</div>
+              <div style={{height: 130}}><ChartRenderer chart={stats?.boxplots?.[feature] || {}} /></div>
+            </div>
+          </div>
+          <div>
+            <div className="p card mb-4">
+              <div className="pt font-semibold mb-2">Skewness & outlier scatter</div>
+              <div style={{height: 210}}><ChartRenderer chart={stats?.skewOutlierScatter || {}} /></div>
+            </div>
+            <div className="p card mb-4">
+              <div className="pt font-semibold mb-2">Distribution profiles</div>
+              {(stats?.profileCards || []).map((card, idx) => (
+                <div key={idx} className={`ir ${card.type}`}> {/* type: iw, ird, ii, io */}
+                  <div className="il font-semibold">{card.label}</div>
+                  <div className="it text-[11px]">{card.text}</div>
                 </div>
-                <div className="col-span-12 md:col-span-6 bg-bg4 border border-dborder rounded-sm px-2 py-2">
-                  <div className="text-[11px] font-semibold text-t1 mb-1">Primary visualization</div>
-                  <ChartRenderer chart={univariateChart} />
-                  <div className="grid grid-cols-2 gap-2 mt-2">
-                    <div className="text-[10px] text-t3">Mean {num(stat?.mean)} · Median {num(stat?.median)} · Mode {num(stat?.mode)}</div>
-                    <div className="text-[10px] text-t3">Std {num(stat?.std_dev)} · Var {num(stat?.variance)} · CV {num(safeNum(stat?.std_dev) / Math.max(Math.abs(safeNum(stat?.mean)), 0.0001), 3)}</div>
-                    <div className="text-[10px] text-t3">Skew {num(stat?.skewness)} · Kurtosis {num(stat?.kurtosis)} · Entropy {num(stat?.entropy)}</div>
-                    <div className="text-[10px] text-t3">P10 {num(stat?.p10)} · Q1 {num(stat?.q1)} · Q3 {num(stat?.q3)} · P90 {num(stat?.p90)}</div>
-                  </div>
-                </div>
-                <div className="col-span-12 md:col-span-3 bg-bg4 border border-dborder rounded-sm px-2 py-2">
-                  <div className="text-[11px] font-semibold text-t1 mb-1">AI Insights</div>
-                  {aiInsights.map((it) => (
-                    <details key={it.title} className="mb-2 border border-dborder rounded-sm px-2 py-1" open>
-                      <summary className="text-[10px] font-semibold text-t1 cursor-pointer">{it.title}</summary>
-                      <div className="text-[10px] text-t2 mt-1">{it.message}</div>
-                      <div className="text-[10px] text-t3 mt-1"><span className="text-t2">Business:</span> {it.business}</div>
-                      <div className="text-[10px] text-t3 mt-1"><span className="text-t2">ML:</span> {it.ml}</div>
-                      <div className="text-[10px] text-t3 mt-1"><span className="text-t2">Action:</span> {it.action}</div>
-                      <div className="mt-1 inline-block text-[9px] px-1.5 py-0.5 rounded-full" style={severityStyle(it.severity)}>
-                        {it.severity} · confidence {num(it.confidence * 100, 0)}%
-                      </div>
-                    </details>
-                  ))}
-                </div>
-              </div>
+              ))}
             </div>
           </div>
         </div>
       )}
+
+      {/* Bivariate Tab */}
       {intelligenceTab === 'bivariate' && (
-        <div className="grid grid-cols-12 gap-3">
-          <div className="col-span-12 xl:col-span-9 space-y-3">
-            <div className="card">
-              <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
-                <div>
-                  <div className="text-[12px] font-semibold text-t1">Bivariate Intelligence</div>
-                  <div className="text-[10px] text-t3">Relationship observability with linear and nonlinear dependency cues.</div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <select className="btn btn-sm" value={feature} onChange={(e) => setFeature(e.target.value)}>
-                    {(featureNames.length ? featureNames : ['n/a']).map((name) => (
-                      <option key={`a-${name}`} value={name}>{name}</option>
-                    ))}
-                  </select>
-                  <select className="btn btn-sm" value={compareFeature} onChange={(e) => setCompareFeature(e.target.value)}>
-                    {(featureNames.length ? featureNames : ['n/a']).map((name) => (
-                      <option key={`b-${name}`} value={name}>{name}</option>
-                    ))}
-                  </select>
-                </div>
+        <div className="sp grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <div className="p card mb-4">
+              <div className="pt font-semibold mb-2">Num vs num — scatter plot</div>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-[11px] text-t3">X:</span>
+                <select className="btn btn-xs" value={feature} onChange={e => setFeature(e.target.value)}>
+                  {featureNames.map((name) => <option key={name} value={name}>{name}</option>)}
+                </select>
+                <span className="text-[11px] text-t3">Y:</span>
+                <select className="btn btn-xs" value={compareFeature} onChange={e => setCompareFeature(e.target.value)}>
+                  {featureNames.map((name) => <option key={name} value={name}>{name}</option>)}
+                </select>
               </div>
-              <div className="grid grid-cols-12 gap-2">
-                <div className="col-span-12 lg:col-span-8 bg-bg4 border border-dborder rounded-sm px-2 py-2">
-                  <div className="text-[11px] font-semibold text-t1 mb-1">Correlation Heatmap</div>
-                  <ChartRenderer chart={bivariateHeatmap} />
-                </div>
-                <div className="col-span-12 lg:col-span-4 bg-bg4 border border-dborder rounded-sm px-2 py-2">
-                  <div className="text-[11px] font-semibold text-t1 mb-1">Dependency Intelligence</div>
-                  <div className="text-[10px] text-t3">Pearson: {num(pairMetrics.pearson, 3)}</div>
-                  <div className="text-[10px] text-t3">Spearman: {num(pairMetrics.spearman, 3)}</div>
-                  <div className="text-[10px] text-t3">Kendall (proxy): {num(pairMetrics.kendallProxy, 3)}</div>
-                  <div className="text-[10px] text-t3">Interaction strength: {num(Math.abs(pairMetrics.pearson) * 100)}%</div>
-                  <div className="text-[10px] text-t3">Linearity score: {num((1 - pairMetrics.corrDelta) * 100)}%</div>
-                  <div className="text-[10px] text-t3">Nonlinear signal delta: {num(pairMetrics.corrDelta, 3)}</div>
-                  <div className="mt-2 text-[10px] text-t2">Business interpretation: {Math.abs(pairMetrics.pearson) >= 0.7 ? 'Strong dependency may indicate shared business driver.' : 'Moderate/weak dependency suggests segmented behavior.'}</div>
-                  <div className="mt-1 text-[10px] text-t2">ML interpretation: {pairMetrics.corrDelta > 0.18 ? 'Nonlinear candidate; interaction features recommended.' : 'Linear relation likely sufficient as first baseline.'}</div>
-                </div>
-                <div className="col-span-12 bg-bg4 border border-dborder rounded-sm px-2 py-2">
-                  <div className="text-[11px] font-semibold text-t1 mb-1">Linear vs Rank Dependency Map</div>
-                  <ChartRenderer chart={bivariateScatter} />
-                </div>
-              </div>
+              <div style={{height: 210}}><ChartRenderer chart={corr?.bivariateScatter || {}} /></div>
+            </div>
+            <div className="p card mb-4">
+              <div className="pt font-semibold mb-2">Num vs categorical — violin / box</div>
+              <div style={{height: 140}}><ChartRenderer chart={corr?.numCatViolin || {}} /></div>
+            </div>
+          </div>
+          <div>
+            <div className="p card mb-4">
+              <div className="pt font-semibold mb-2">Categorical vs categorical — stacked bar</div>
+              <div style={{height: 160}}><ChartRenderer chart={corr?.catCatStacked || {}} /></div>
+            </div>
+            <div className="p card mb-4">
+              <div className="pt font-semibold mb-2">Cross-tabulation</div>
+              {/* Render a table if available */}
+              {corr?.crossTab ? (
+                <table className="w-full text-[11px] border-collapse">
+                  <thead>
+                    <tr>
+                      <th className="text-left p-1">{corr.crossTab.rowLabel}</th>
+                      {corr.crossTab.colLabels.map((col, idx) => (
+                        <th key={idx} className="text-right p-1">{col}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {corr.crossTab.rows.map((row, idx) => (
+                      <tr key={idx}>
+                        <td className="p-1 text-t2">{row.label}</td>
+                        {row.values.map((val, j) => (
+                          <td key={j} className="p-1 text-right">{val}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : <div className="text-[11px] text-t3">No cross-tabulation data.</div>}
             </div>
           </div>
         </div>
       )}
+
+      {/* Multivariate tab visuals */}
       {intelligenceTab === 'multivariate' && (
         <div className="grid grid-cols-12 gap-3">
-          <div className="col-span-12 xl:col-span-9 space-y-3">
+          <div className="col-span-12 xl:col-span-12 space-y-3">
             <div className="card">
               <div className="text-[12px] font-semibold text-t1">Multivariate Intelligence</div>
               <div className="text-[10px] text-t3 mb-2">Hidden interaction structure, covariance concentration, and segmentation proxies.</div>
