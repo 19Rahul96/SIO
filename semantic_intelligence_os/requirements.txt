@@ -1,0 +1,20 @@
+# Core API
+fastapi>=0.110
+uvicorn[standard]>=0.27
+python-multipart>=0.0.9
+
+# Extraction adapters (optional but recommended; pipeline degrades gracefully without)
+pypdf>=4.0
+python-docx>=1.1
+pandas>=2.0
+openpyxl>=3.1
+
+# Database source connections (optional; needed only for DB ingestion)
+SQLAlchemy>=2.0
+psycopg2-binary>=2.9   # PostgreSQL
+PyMySQL>=1.1           # MySQL
+
+# Semantics / embeddings (optional; deterministic hash fallback if absent)
+sentence-transformers>=2.6
+spacy>=3.7
+# python -m spacy download en_core_web_sm

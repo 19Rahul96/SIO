@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Semantic Intelligence OS — 14-Layer Pipeline</title>
+<style>
+  :root{
+    --bg:#070a14; --bg2:#0c1020; --card:#0e1426; --card2:#121a30;
+    --border:#1c2742; --border-glow:#2f6bff; --t1:#e8ecf7; --t2:#9aa6c4; --t3:#64708f;
+    --blue:#4f8bff; --teal:#22d3ee; --green:#34d399; --amber:#fbbf24; --red:#fb7185; --purple:#a78bfa;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:radial-gradient(1200px 600px at 50% -10%,#10183000,#070a14),var(--bg);
+    color:var(--t1);font-family:'Segoe UI',Inter,system-ui,sans-serif;line-height:1.5;padding:40px 16px 80px}
+  .wrap{max-width:920px;margin:0 auto}
+  header{text-align:center;margin-bottom:8px}
+  h1{font-size:26px;font-weight:700;letter-spacing:.3px;
+    background:linear-gradient(90deg,#4f8bff,#22d3ee);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{color:var(--t2);font-size:13px;margin-top:6px}
+  .io{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin:18px 0 8px}
+  .io .box{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 14px;font-size:12px;color:var(--t2);max-width:420px}
+  .io .box b{color:var(--t1)}
+  .toolbar{display:flex;gap:8px;justify-content:center;margin:18px 0 26px}
+  .btn{background:var(--card2);border:1px solid var(--border);color:var(--t2);border-radius:20px;
+    padding:6px 14px;font-size:12px;cursor:pointer;transition:.15s}
+  .btn:hover{border-color:var(--border-glow);color:var(--t1)}
+  .phase{text-align:center;color:var(--blue);font-size:13px;font-weight:600;letter-spacing:2px;
+    margin:24px 0 14px;text-transform:uppercase;display:flex;align-items:center;justify-content:center;gap:10px}
+  .phase::before,.phase::after{content:'';height:1px;width:60px;background:linear-gradient(90deg,#0000,#2f6bff80)}
+  .phase::after{transform:rotate(180deg)}
+  .arrow{text-align:center;color:#3a64c8;font-size:18px;margin:-4px 0 2px;animation:bob 2s ease-in-out infinite}
+  @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(4px)}}
+  .card{background:linear-gradient(180deg,var(--card),var(--bg2));border:1px solid var(--border);
+    border-radius:14px;margin:12px 0;overflow:hidden;transition:.2s}
+  .card:hover{border-color:#274071;box-shadow:0 0 0 1px #2f6bff22,0 8px 30px #0008}
+  .card.open{border-color:var(--border-glow);box-shadow:0 0 0 1px #2f6bff33,0 10px 40px #2f6bff14}
+  .head{display:flex;align-items:center;gap:16px;padding:18px 20px;cursor:pointer;user-select:none}
+  .num{flex:0 0 auto;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-weight:700;font-size:14px;color:#fff;background:linear-gradient(135deg,#3b6fe0,#22a7d6);
+    box-shadow:0 0 14px #3b6fe066}
+  .num.gov{background:linear-gradient(135deg,#8b5cf6,#6d28d9);box-shadow:0 0 14px #8b5cf666}
+  .num.graph{background:linear-gradient(135deg,#0ea5a8,#22d3ee);box-shadow:0 0 14px #22d3ee55}
+  .num.sub{width:26px;height:26px;font-size:11px;background:linear-gradient(135deg,#475569,#334155);box-shadow:none}
+  .titles{flex:1}
+  .ttl{font-size:15px;font-weight:600}
+  .desc{font-size:12px;color:var(--t2);margin-top:2px}
+  .chev{color:var(--t3);transition:.2s;font-size:13px}
+  .card.open .chev{transform:rotate(180deg);color:var(--blue)}
+  .body{max-height:0;overflow:hidden;transition:max-height .3s ease}
+  .body-inner{padding:0 20px 20px 70px}
+  .card.subcard .body-inner{padding-left:62px}
+  .meta{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:12px;margin-top:6px}
+  .meta .k{color:var(--t3);white-space:nowrap}
+  .meta .v{color:var(--t1)}
+  code{background:#0008;border:1px solid var(--border);border-radius:5px;padding:1px 6px;font-size:11.5px;color:var(--teal);font-family:ui-monospace,Menlo,monospace}
+  .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .chip{font-size:10.5px;border-radius:20px;padding:3px 9px;border:1px solid}
+  .c-out{color:var(--green);border-color:#34d39955;background:#34d39912}
+  .c-art{color:var(--amber);border-color:#fbbf2455;background:#fbbf2412}
+  .c-metric{color:var(--purple);border-color:#a78bfa55;background:#a78bfa12}
+  .note{font-size:11px;color:var(--t3);margin-top:10px;border-left:2px solid var(--border);padding-left:10px}
+  footer{text-align:center;color:var(--t3);font-size:11px;margin-top:36px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Semantic Intelligence OS — 14-Layer Pipeline</h1>
+    <div class="sub">Standalone visualization of <code>semantic_intelligence_os/app/pipeline.py</code> · click any step to expand · grounded in the actual code</div>
+  </header>
+
+  <div class="io">
+    <div class="box"><b>Input →</b> Files (PDF, DOCX, TXT, MD, CSV, XLSX, JSON, HTML), folders, or databases (PostgreSQL / MySQL / SQLite). Endpoints <code>/sio/ingest</code>, <code>/sio/ingest/database</code>.</div>
+    <div class="box"><b>Output →</b> canonical knowledge graph + wiki pages + EDA / validation / governance / confidence artifacts under <code>data/</code>, served via <code>/sio/*</code> to the Observatory &amp; Semantic OS UI.</div>
+  </div>
+
+  <div class="toolbar">
+    <button class="btn" onclick="toggleAll(true)">Expand all</button>
+    <button class="btn" onclick="toggleAll(false)">Collapse all</button>
+  </div>
+
+  <div id="pipeline"></div>
+
+  <footer>Generated from the SIO codebase · governance mode default = <code>observe_only</code> · no LLM is used in the default path (spaCy NER + sentence-transformer embeddings, with deterministic fallbacks).</footer>
+</div>
+
+<script>
+const STEPS = [
+  {phase:"Ingestion"},
+  {n:1,cls:"",t:"File Upload + Lineage",d:"Register source, fingerprint, deduplicate, anchor provenance.",
+   file:"layers/s01_upload.py",fn:"register_source()",cons:"raw bytes + filename + role/domain",
+   prod:"source record (SHA-256 fingerprint, duplicate_of) + lineage event log",
+   art:["data/sources/","data/lineage/"],metrics:["fingerprint","duplicate_of"],
+   note:"Duplicates are flagged, not blocked (additive, non-destructive)."},
+  {n:2,cls:"",t:"Ingestion & Extraction",d:"Turn any file into one corpus contract + parser confidence.",
+   file:"layers/s02_extraction.py",fn:"extract_corpus() → _extract_pdf/_docx/_table/_text",
+   cons:"stored source file",prod:"corpus {plain_text, text_blocks[], table_rows[], columns[]}; needs_ocr flag",
+   art:["data/corpus/"],metrics:["parser confidence (block alnum ratio)","needs_ocr (<0.4)"],
+   note:"OCR engine itself is NOT implemented — only a needs_ocr flag + page confidence."},
+  {n:3,cls:"",t:"Cleaning + Normalization",d:"Standardize encoding, whitespace, currency, dates.",
+   file:"layers/s03_normalization.py",fn:"normalize_corpus()",cons:"corpus.plain_text",
+   prod:"normalized text + normalization.applied[]",art:[],
+   metrics:["NFKC","currency→ISO","date→YYYY-MM-DD"]},
+  {n:4,cls:"",t:"Chunking + Structural Segmentation",d:"Create provenance-carrying processing units.",
+   file:"layers/s04_chunking.py",fn:"chunk_corpus() → _window_chunks / _table_chunks",
+   cons:"normalized corpus",prod:"chunks[] + coverage validation",art:["data/chunks/"],
+   metrics:["word-window 400/60","table-aware 25 rows","coverage_pct","data_loss_suspected"]},
+
+  {phase:"Intelligence"},
+  {n:5,cls:"",t:"Metadata Intelligence",d:"Infer column meaning + predict keys (tabular sources).",
+   file:"layers/s05_metadata.py",fn:"build_metadata() → _label_column / _predict_keys / _classify_table",
+   cons:"corpus.columns + table_rows",prod:"per-column datatype + semantic_label + audit; PK/FK predictions; table_classification",
+   art:["data/metadata/"],metrics:["semantic_label (0.40–0.82)","PK uniqueness≥0.98","FK name regex"],
+   note:"Keys are predicted (not read from real constraints) for file sources."},
+  {n:6,cls:"",t:"Entity + Relationship Extraction",d:"spaCy/regex NER + sentence co-occurrence relations.",
+   file:"layers/s06_entity_relation.py",fn:"extract() → _ner / _classify_relation",
+   cons:"chunks + ontology-allowed predicates",prod:"entities[] (typed, chunk-grounded) + relationships[]",
+   art:["data/entities/"],metrics:["entity confidence = 0.4·freq + 0.35·label + 0.25·len","predicates: has_revenue/employs/owns/located_in/occurred_at/related_to"],
+   note:"spaCy is the model path; regex fallback (with org/person/location heuristics) runs when spaCy is absent."},
+  {n:"6b",cls:"sub",sub:true,t:"Extraction Observability",d:"Parser/OCR confidence + per-chunk lineage table.",
+   file:"layers/extraction_observability.py",fn:"build()",cons:"source + corpus + chunks + entities",
+   prod:"lineage rows {chunk_id, adapter, confidence, page/row, entity_count, warnings} + pdf page confidence",
+   art:["data/extraction/"],metrics:["low_parser_confidence","no_entities_extracted"]},
+  {n:7,cls:"",t:"Semantic Learning",d:"Persistent embedding memory + adaptive priors across runs.",
+   file:"layers/s07_semantic_learning.py",fn:"learn() / prior_for() / nearest_terms()",
+   cons:"extraction entities + relationships",prod:"semantic memory (embeddings, observations, prior, co-occurrence)",
+   art:["data/semantic_memory/memory.json"],metrics:["prior = min(0.95, 0.5 + 0.05·observations)"]},
+
+  {phase:"Analysis"},
+  {n:8,cls:"",t:"EDA Intelligence",d:"Graph + semantic EDA, plus numeric stats for tabular data.",
+   file:"layers/s08_eda.py + layers/_stats.py",fn:"run_eda() / _numeric_eda() / column_stats() / correlation()",
+   cons:"extraction + corpus + metadata",prod:"graph_eda, confidence_eda, semantic_cluster_map, semantic_drift, numeric{columns,correlation,consistency_checks}",
+   art:["data/eda/"],metrics:["density, avg_degree, orphans","mean/median/std/skew/kurtosis/histogram/QQ/box/IQR & z-outliers","pearson/spearman","invalid_dates/type_mismatches/duplicates"]},
+  {n:9,cls:"",t:"ML Validation & Accuracy",d:"Statistically measure trust; flag hallucination risk.",
+   file:"layers/s09_validation.py",fn:"validate() → _prf / _calibration_error",
+   cons:"extraction + eda (+ optional gold set)",prod:"P/R/F1, recall@5, MRR, calibration_error, hallucination_risk, graph_trust_score",
+   art:["data/validation/"],metrics:["hallucination = 0.6·generic_rel + 0.4·min(1,drift/10)","trust = 0.30·entF1 + 0.30·relF1 + 0.20·(1−halluc) + 0.20·(1−ECE)"],
+   note:"Gold set is bootstrapped from high-confidence extractions when none is curated."},
+
+  {phase:"Governance"},
+  {n:10,cls:"gov",t:"Ontology & Semantic Governance (gate)",d:"Validate every relationship BEFORE it enters the graph.",
+   file:"layers/s10_ontology.py",fn:"govern() / load_ontology() / update_ontology()",
+   cons:"extraction relationships + validation",prod:"per-relationship verdict (auto_accept/review_required/reject) + ontology_consistency",
+   art:["data/governance/","data/governance/ontology.json"],metrics:["taxonomy + relationship_constraints","ontology_consistency = 1 − rejects/total"],
+   note:"observe_only (default) annotates only; enforce excludes rejects/reviews. The core trust gate."},
+  {n:11,cls:"gov",t:"Canonicalization & Resolution",d:"Merge duplicate entities into one canonical node.",
+   file:"layers/s11_canonicalization.py",fn:"resolve()",cons:"extraction + governance",
+   prod:"text→canonical_id map; canonical registry with merges + pending reviews",
+   art:["data/canonical/registry.json"],metrics:["score = 0.45·exact + 0.35·lexical + 0.20·embedding + prior nudge","merge ≥ 0.72 · review 0.58–0.72"]},
+
+  {phase:"Knowledge Graph"},
+  {n:12,cls:"graph",t:"Knowledge Graph Construction",d:"Build the confidence-weighted canonical graph + RDF triples.",
+   file:"layers/s12_graph.py",fn:"construct() / get_graph() / _edge_confidence()",
+   cons:"canonical map + accepted relationships",prod:"nodes (canonical_id, type, aliases, provenance) + confidence-weighted edges + triples",
+   art:["data/graph/canonical_graph.json","data/graph/{id}_triples.json"],
+   metrics:["edge conf = base(0.4/0.7) + min(0.2, 0.02·cooccurrence)"]},
+  {n:"12b",cls:"graph sub",sub:true,t:"Confidence Ledger",d:"Per-entity × per-layer confidence matrix (heatmap source).",
+   file:"layers/confidence_ledger.py",fn:"build()",cons:"extraction + canonical + eda + validation + graph",
+   prod:"matrix: Extraction · Resolution · Canonicalization · Graph Insert · EDA Validation",
+   art:["data/confidence/matrix.json"],metrics:["null cell = no signal at that layer"]},
+  {n:13,cls:"graph",t:"Graph Validation & Consistency",d:"Continuously check the graph's correctness.",
+   file:"layers/s13_graph_consistency.py",fn:"validate_graph() / _find_cycles()",
+   cons:"canonical graph + ontology",prod:"orphans, cycles, ontology violations, low-confidence edges, graph_trust_score",
+   art:["data/graph/consistency_report.json"],
+   metrics:["trust = 1 − 0.4·violations/E − 0.2·orphans/N − 0.2·lowconf/E − 0.2·min(1,cycles/5)"]},
+  {n:14,cls:"graph",t:"Wiki + Explainability",d:"Human-readable, cited, explained entity pages.",
+   file:"layers/s14_wiki.py",fn:"build_pages()",cons:"canonical graph + validation",
+   prod:"per-entity page: summary, cited key facts, relationship/lineage/confidence explanations",
+   art:["data/wiki/"],metrics:["citation-backed facts","confidence explanation by trust band"]},
+];
+
+const root = document.getElementById('pipeline');
+let firstStep = true;
+STEPS.forEach(s=>{
+  if(s.phase){
+    if(!firstStep) root.insertAdjacentHTML('beforeend','<div class="arrow">▼</div>');
+    firstStep=false;
+    root.insertAdjacentHTML('beforeend',`<div class="phase">${s.phase}</div>`);
+    return;
+  }
+  const chips = []
+    .concat(s.prod?[`<span class="chip c-out">produces</span>`]:[])
+    .concat((s.art||[]).map(a=>`<span class="chip c-art">${a}</span>`))
+    .concat((s.metrics||[]).map(m=>`<span class="chip c-metric">${m}</span>`))
+    .join('');
+  const meta = `
+    <div class="meta">
+      <span class="k">File</span><span class="v"><code>${s.file}</code></span>
+      <span class="k">Function</span><span class="v"><code>${s.fn}</code></span>
+      <span class="k">Consumes</span><span class="v">${s.cons}</span>
+      <span class="k">Produces</span><span class="v">${s.prod}</span>
+    </div>
+    <div class="chips">${chips}</div>
+    ${s.note?`<div class="note">${s.note}</div>`:''}`;
+  root.insertAdjacentHTML('beforeend',`
+    <div class="card ${s.sub?'subcard':''}">
+      <div class="head" onclick="toggle(this)">
+        <div class="num ${s.cls||''}">${s.n}</div>
+        <div class="titles"><div class="ttl">${s.t}</div><div class="desc">${s.d}</div></div>
+        <div class="chev">▼</div>
+      </div>
+      <div class="body"><div class="body-inner">${meta}</div></div>
+    </div>`);
+});
+
+function toggle(head){
+  const card=head.parentElement, body=card.querySelector('.body');
+  const open=card.classList.toggle('open');
+  body.style.maxHeight = open ? body.scrollHeight+40+'px' : '0';
+}
+function toggleAll(open){
+  document.querySelectorAll('.card').forEach(card=>{
+    const body=card.querySelector('.body');
+    card.classList.toggle('open',open);
+    body.style.maxHeight = open ? body.scrollHeight+40+'px' : '0';
+  });
+}
+</script>
+</body>
+</html>

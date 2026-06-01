@@ -5,9 +5,11 @@ import InjectPage from './pages/InjectPage'
 import PromptPage from './pages/PromptPage'
 import ModelPage from './pages/ModelPage'
 import ResultsPage from './pages/ResultsPage'
+import SemanticOSPage from './pages/SemanticOSPage'
 import useStore from './store'
 
-const PAGES = [DashboardPage, InjectPage, PromptPage, ModelPage, ResultsPage]
+// Semantic OS is now the single unified surface (Observatory folded in with a scope selector).
+const PAGES = [DashboardPage, InjectPage, PromptPage, ModelPage, ResultsPage, SemanticOSPage]
 
 export default function App() {
   const currentStep = useStore((s) => s.currentStep)

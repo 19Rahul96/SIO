@@ -1,0 +1,7 @@
+# Runtime artifacts produced by the pipeline (regenerated on ingest)
+data/
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/

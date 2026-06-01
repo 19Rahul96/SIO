@@ -1,7 +1,7 @@
 import useStore from '../store'
 import c5iLogo from '../assests/c5i-primary-logo.svg'
 
-const STEPS = ['Dashboard', '① Inject', '② Prompt', '③ Model', '④ Results']
+const STEPS = ['Dashboard', '① Inject', '② Prompt', '③ Model', '④ Results', '◆ Semantic OS']
 
 export default function Topbar() {
   const { currentStep, setStep } = useStore()
